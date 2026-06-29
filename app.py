@@ -5,15 +5,13 @@ import base64
 from datetime import datetime
 import pandas as pd
 
-# মোবাইলের জন্য রেসপনসিভ পেজ কনফিগারেশন
 st.set_page_config(
     page_title="PySquad Hub",
-    page_icon="🐍",
+    page_icon="https://img.icons8.com/color/144/python.png",  # আসল পাইথন লোগো ট্যাব আইকন হিসেবে
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# মডার্ন ডার্ক থিম সিএসএস (মোবাইল ফ্রেন্ডলি ডিজাইন)
 st.markdown("""
 <style>
     /* স্ট্রিমলিটের ডিফল্ট হেডার-ফুটার হাইড করার জন্য */
@@ -37,13 +35,23 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
     
-    /* টাইটেল এবং ব্যাজ স্টাইল */
+    /* টাইটেল এবং লোগো কন্টেইনার */
+    .logo-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 5px;
+    }
+    .logo-img {
+        width: 48px;
+        height: 48px;
+    }
     .app-title {
         font-size: 2.2rem;
         font-weight: 800;
         color: #58a6ff;
-        text-align: center;
-        margin-bottom: 5px;
+        margin: 0;
         font-family: 'Inter', sans-serif;
     }
     .app-subtitle {
@@ -146,7 +154,6 @@ def init_db():
 
 init_db()
 
-# ভিডিও লিংক প্রসেস করার ফাংশন (যা স্ট্রিমলিট প্লেয়ার ও মোবাইলের জন্য সেরা)
 def get_playable_url(url):
     if "youtu.be/" in url:
         video_id = url.split("youtu.be/")[1].split("?")[0]
@@ -157,7 +164,6 @@ def get_playable_url(url):
         video_id = url.split("embed/")[1].split("?")[0]
         return f"https://www.youtube.com/watch?v={video_id}"
     elif "drive.google.com" in url:
-        # ড্রাইভ লিংকের জন্য ডাইরেক্ট স্ট্রিম লিংক বের করা
         try:
             if "/file/d/" in url:
                 file_id = url.split("/file/d/")[1].split("/")[0]
@@ -170,20 +176,20 @@ def get_playable_url(url):
             return url
     return url
 
-# আপলোড করা ছবিকে Base64 টেক্সটে রূপান্তর
 def file_to_base64(uploaded_file):
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
         return base64.b64encode(file_bytes).decode("utf-8")
     return None
 
-# সেশন স্টেট ইনিশিয়ালাইজেশন
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = None
     st.session_state.role = None
 if "current_tab" not in st.session_state:
     st.session_state.current_tab = "Home"
+if "success_notification" not in st.session_state:
+    st.session_state.success_notification = None
 
 # অটো-লগইন প্রসেস (যদি ব্রাউজার লিংকে session_token থাকে)
 if not st.session_state.logged_in:
@@ -203,7 +209,6 @@ if not st.session_state.logged_in:
                 st.session_state.username = session_record["username"]
                 st.session_state.role = session_record["role"]
             else:
-                # অবৈধ টোকেন হলে রিমুভ করা
                 st.query_params.pop("session_token", None)
 
 def login_user(username, password):
@@ -242,7 +247,12 @@ def register_user(username, password):
         return False
 
 # ----------------- অ্যাপ রেন্ডারিং -----------------
-st.markdown("<h1 class='app-title'>🐍 PySquad Hub</h1>", unsafe_allow_html=True)
+st.markdown("""
+<div class="logo-container">
+    <img src="https://img.icons8.com/color/144/python.png" class="logo-img" alt="Python Logo">
+    <h1 class="app-title">PySquad Hub</h1>
+</div>
+""", unsafe_allow_html=True)
 st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস ট্র্যাক করি</div>", unsafe_allow_html=True)
 
 if not st.session_state.logged_in:
@@ -285,7 +295,6 @@ else:
         if st.button("📊 ট্র্যাকার"): st.session_state.current_tab = "Tracker"
     with nav_cols[2]:
         if st.button("🔓 লগআউট"):
-            # লগআউট করার সময় ব্রাউজার ও ডাটাবেজ থেকে সেশন টোকেন ডিলিট করা
             token = st.query_params.get("session_token")
             if token:
                 with get_db_connection() as conn:
@@ -318,7 +327,6 @@ else:
                 st.markdown(f"<div class='card'>", unsafe_allow_html=True)
                 st.markdown(f"<h3>ভিডিও #{idx+1}: {vid['title']}</h3>", unsafe_allow_html=True)
                 
-                # ভিডিও দেখা হয়েছে কিনা চেক করা
                 with get_db_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM views WHERE username = ? AND video_id = ?", 
@@ -332,18 +340,15 @@ else:
                 
                 st.write("")
                 
-                # নতুন ও উন্নত মোবাইল ফ্রেন্ডলি প্লেয়ার (নরমাল ও ফুল স্ক্রিন সাপোর্ট)
                 playable_link = get_playable_url(vid["url"])
                 try:
                     st.video(playable_link)
                 except Exception:
                     st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
                 
-                # প্র্যাকটিস টাস্কের বিবরণ
                 with st.expander("📝 প্র্যাকটিস টাস্কের বিস্তারিত দেখুন", expanded=True):
                     st.markdown(f"**আজকের কাজ:** \n{vid['task_desc']}")
                 
-                # অ্যাকশন বাটনসমূহ
                 col1, col2 = st.columns(2)
                 with col1:
                     if not watched:
@@ -356,7 +361,6 @@ else:
                             st.success("ভিডিও দেখা সফলভাবে সেভ হয়েছে!")
                             st.rerun()
                 with col2:
-                    # স্ক্রিনশট আপলোড সেকশন
                     with st.expander("📤 স্ক্রিনশট জমা দিন"):
                         up_file = st.file_uploader("আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন", type=["png", "jpg", "jpeg"], key=f"up_{vid_id}")
                         if st.button("টাস্ক সাবমিট করুন 🚀", key=f"sub_btn_{vid_id}"):
@@ -366,7 +370,6 @@ else:
                                     cursor = conn.cursor()
                                     cursor.execute("INSERT INTO submissions (username, video_id, screenshot, submitted_at) VALUES (?, ?, ?, ?)",
                                                    (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
-                                    # সাবমিট করলে অটোমেটিক্যালি ভিডিও দেখা কমপ্লিট হয়ে যাবে
                                     cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
                                                    (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
                                     conn.commit()
@@ -382,11 +385,8 @@ else:
         st.subheader("গ্রুপের বন্ধুদের কাজের ট্র্যাকিং")
         
         with get_db_connection() as conn:
-            # অ্যাডমিন বাদে অন্য সব ইউজার
             df_users = pd.read_sql_query("SELECT username FROM users WHERE role != 'admin'", conn)
-            # সর্বমোট ভিডিওর সংখ্যা
             df_vids = pd.read_sql_query("SELECT id, title FROM videos", conn)
-            # সাবমিশন ডাটা
             df_subs = pd.read_sql_query("SELECT username, video_id FROM submissions", conn)
             
         if df_users.empty:
@@ -415,7 +415,6 @@ else:
                     st.markdown(f"🔴 **বাকি আছে:** {', '.join(missing_labels)}")
                 st.markdown("</div>", unsafe_allow_html=True)
             
-            # বন্ধুদের জমা দেওয়া কাজের লাইভ ফিড
             st.write("### 📸 সবার জমা দেওয়া প্র্যাকটিস স্ক্রিনশটসমূহ")
             with get_db_connection() as conn:
                 cursor = conn.cursor()
@@ -435,7 +434,6 @@ else:
                     st.markdown(f"👤 **{sub['username']}** স্ক্রিনশট জমা দিয়েছে - **ভিডিও: `{sub['title']}`**-এর জন্য")
                     st.caption(f"জমা দেওয়ার সময়: {sub['submitted_at']}")
                     
-                    # Base64 থেকে ছবি ডিকোড করে দেখানো
                     img_data = sub["screenshot"]
                     try:
                         st.image(base64.b64decode(img_data), use_column_width=True)
@@ -447,10 +445,22 @@ else:
     elif st.session_state.current_tab == "Admin" and st.session_state.role == "admin":
         st.subheader("গ্রুপ লিডার কন্ট্রোল প্যানেল (অ্যাডমিন)")
         
-        admin_tab1, admin_tab2, admin_tab3 = st.tabs(["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন"])
+        # সফল আপলোড নোটিফিকেশন প্রদর্শন (পেজ রিরানের পরেও এটি কাজ করবে)
+        if st.session_state.success_notification:
+            st.success(st.session_state.success_notification)
+            st.session_state.success_notification = None  # একবার দেখানোর পর রিসেট করুন
         
-        # ট্যাব ১: নতুন ভিডিও আপলোড
-        with admin_tab1:
+        # ২য় ছবির ভাঙা বক্স বা খালি কন্টেইনার সম্পূর্ণ রিমুভ করে নতুন মোবাইল ফ্রেন্ডলি মেনু অ্যাড
+        admin_action = st.radio(
+            "মেডিউল সিলেক্ট করুন:", 
+            ["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন"], 
+            horizontal=True
+        )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # অ্যাকশন ১: নতুন ভিডিও আপলোড
+        if admin_action == "📤 নতুন ভিডিও দিন":
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.write("### 🎬 নতুন ভিডিও ও টাস্ক আপলোড করুন")
             v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
@@ -464,14 +474,15 @@ else:
                         cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
                                        (v_title, v_url, v_task, datetime.now().strftime("%Y-%m-%d")))
                         conn.commit()
-                    st.success(f"সফলভাবে পাবলিশ করা হয়েছে: {v_title}")
+                    # ৩য় ছবির রিকোয়েস্ট অনুযায়ী সেশন স্টেটে সাকসেস মেসেজ সেট করা
+                    st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও এবং টাস্ক আপলোড হয়েছে: {v_title}"
                     st.rerun()
                 else:
                     st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
             st.markdown("</div>", unsafe_allow_html=True)
         
-        # ট্যাব ২: কে কে ভিডিও দেখেছে তার ট্র্যাকিং
-        with admin_tab2:
+        # অ্যাকশন ২: কে কে ভিডিও দেখেছে তার ট্র্যাকিং
+        elif admin_action == "👁️ ভিউ ট্র্যাকিং":
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.write("### 👁️ কোন ভিডিও কে কে দেখেছে দেখুন")
             with get_db_connection() as conn:
@@ -502,8 +513,8 @@ else:
                 st.info("ভিউয়ার্স ট্র্যাক করার জন্য আগে ভিডিও আপলোড করুন।")
             st.markdown("</div>", unsafe_allow_html=True)
             
-        # ট্যাব ৩: ভিডিও ডিলিট করা
-        with admin_tab3:
+        # অ্যাকশন ৩: ভিডিও ডিলিট করা
+        elif admin_action == "🗑️ ভিডিও মুছুন":
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.write("### 🗑️ ভিডিও ডিলিট ম্যানেজমেন্ট")
             with get_db_connection() as conn:
@@ -522,11 +533,8 @@ else:
                         if st.button("🗑️ মুছুন", key=f"del_v_{v_del['id']}"):
                             with get_db_connection() as conn:
                                 cursor = conn.cursor()
-                                # ভিডিও টেবিল থেকে ডিলিট
                                 cursor.execute("DELETE FROM videos WHERE id = ?", (v_del["id"],))
-                                # এই ভিডিওর সাথে সংযুক্ত ভিউ ডিলিট
                                 cursor.execute("DELETE FROM views WHERE video_id = ?", (v_del["id"],))
-                                # এই ভিডিওর সাথে সংযুক্ত সাবমিশন ডিলিট
                                 cursor.execute("DELETE FROM submissions WHERE video_id = ?", (v_del["id"],))
                                 conn.commit()
                             st.success("ভিডিওটি সফলভাবে মুছে ফেলা হয়েছে!")
