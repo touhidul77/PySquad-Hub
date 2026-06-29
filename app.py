@@ -99,6 +99,15 @@ st.markdown("""
         display: inline-block;
     }
     
+    /* নোটিফিকেশন কার্ড ডিজাইন */
+    .notif-card {
+        background-color: #1c2128 !important;
+        border-left: 4px solid #58a6ff !important;
+        border-radius: 8px !important;
+        padding: 12px 16px !important;
+        margin-bottom: 12px !important;
+    }
+    
     /* বাটনের মডার্ন স্টাইল */
     div.stButton > button {
         background-color: #21262d !important;
@@ -141,7 +150,7 @@ def init_db():
                 role TEXT NOT NULL
             )
         """)
-        # ভিডিও ও টাস্ক টেবিল (ব্যাকওয়ার্ড সামঞ্জস্যের জন্য task_desc কলামটি রাখা হয়েছে)
+        # ভিডিও টেবিল
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS videos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,6 +188,23 @@ def init_db():
                 created_at TEXT
             )
         """)
+        # নোটিফিকেশন সিস্টেম টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT, -- 'ALL', 'admin' অথবা নির্দিষ্ট ইউজারনেম
+                message TEXT,
+                created_at TEXT
+            )
+        """)
+        # নোটিফিকেশন রিড ট্র্যাকিং টেবিল (কার কার পড়া শেষ হয়েছে)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_reads (
+                username TEXT,
+                notification_id INTEGER,
+                PRIMARY KEY (username, notification_id)
+            )
+        """)
         
         # ডিফল্ট অ্যাডমিন অ্যাকাউন্ট তৈরি
         admin_pass_hash = hashlib.sha256("Touhidul#20".encode()).hexdigest()
@@ -189,6 +215,15 @@ def init_db():
         conn.commit()
 
 init_db()
+
+def add_notification(username, message):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notifications (username, message, created_at)
+            VALUES (?, ?, ?)
+        """, (username, message, datetime.now().strftime("%Y-%m-%d %H:%M")))
+        conn.commit()
 
 def get_playable_url(url):
     if "youtu.be/" in url:
@@ -227,7 +262,6 @@ if "current_tab" not in st.session_state:
 if "success_notification" not in st.session_state:
     st.session_state.success_notification = None
 
-# অটো-লগইন প্রসেস (যদি ব্রাউজার লিংকে session_token থাকে)
 if not st.session_state.logged_in:
     query_params = st.query_params
     if "session_token" in query_params:
@@ -258,14 +292,12 @@ def login_user(username, password):
             st.session_state.username = user["username"]
             st.session_state.role = user["role"]
             
-            # পেজ রিলোড এর জন্য টোকেন জেনারেট ও সেভ করা
             token_string = f"{username}-{datetime.now().isoformat()}"
             token = hashlib.sha256(token_string.encode()).hexdigest()
             cursor.execute("INSERT OR REPLACE INTO sessions (username, token, created_at) VALUES (?, ?, ?)",
                            (username, token, datetime.now().isoformat()))
             conn.commit()
             
-            # ব্রাউজার লিংকে টোকেন সেট করা
             st.query_params["session_token"] = token
             return True
     return False
@@ -282,7 +314,7 @@ def register_user(username, password):
     except sqlite3.IntegrityError:
         return False
 
-# লোগো এবং টাইটেল যা ল্যাপটপ এবং মোবাইল সব জায়গায় সিঙ্গেল লাইনে থাকবে
+# লোগো এবং টাইটেল
 st.markdown("""
 <div class="logo-container">
     <img src="https://img.icons8.com/color/144/python.png" class="logo-img" alt="Python Logo">
@@ -292,7 +324,7 @@ st.markdown("""
 st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস ট্র্যাক করি</div>", unsafe_allow_html=True)
 
 if not st.session_state.logged_in:
-    with st.container(border=True):  # নেটিভ কন্টেইনার ব্যবহার করায় কোনো খালি বক্স থাকবে না
+    with st.container(border=True):
         auth_mode = st.radio("আপনার অ্যাকশন সিলেক্ট করুন", ["লগইন করুন", "নতুন অ্যাকাউন্ট খুলুন"], horizontal=True)
         
         username_input = st.text_input("ইউজারনেম (Username)", placeholder="যেমন: Touhidul")
@@ -345,6 +377,44 @@ else:
         with nav_cols[3]:
             if st.button("⚙️ অ্যাডমিন"): st.session_state.current_tab = "Admin"
 
+    # ইন-অ্যাপ নোটিফিকেশন রেন্ডারিং (ড্যাশবোর্ডের একদম ওপরে)
+    username = st.session_state.username
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # ইউজারের জন্য নোটিফিকেশন কোয়েরি (ব্যক্তিগত রিমাইন্ডার এবং ব্রডকাস্ট)
+        if username == 'admin':
+            cursor.execute("""
+                SELECT n.* FROM notifications n
+                LEFT JOIN notification_reads nr ON n.id = nr.notification_id AND nr.username = 'admin'
+                WHERE (n.username = 'admin' OR n.username = 'ALL') AND nr.notification_id IS NULL
+                ORDER BY n.id DESC
+            """)
+        else:
+            cursor.execute("""
+                SELECT n.* FROM notifications n
+                LEFT JOIN notification_reads nr ON n.id = nr.notification_id AND nr.username = ?
+                WHERE (n.username = ? OR n.username = 'ALL') AND nr.notification_id IS NULL
+                ORDER BY n.id DESC
+            """, (username, username))
+        unread_notifs = cursor.fetchall()
+        
+    if unread_notifs:
+        st.markdown("### 🔔 নতুন নোটিফিকেশন")
+        for notif in unread_notifs:
+            with st.container(border=True):
+                st.markdown(f"<div class='notif-card'>{notif['message']}</div>", unsafe_allow_html=True)
+                st.caption(f"সময়: {notif['created_at']}")
+                if st.button("পঠিত হিসেবে মার্ক করুন ✓", key=f"read_notif_{notif['id']}"):
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO notification_reads (username, notification_id)
+                            VALUES (?, ?)
+                        """, (st.session_state.username, notif['id']))
+                        conn.commit()
+                    st.rerun()
+        st.markdown("---")
+
     # ----------------- পেজ ১: ভিডিও পোর্টাল (HOME) -----------------
     if st.session_state.current_tab == "Home":
         st.subheader("আপনার আজকের ক্লাসের ভিডিও")
@@ -359,7 +429,7 @@ else:
         else:
             for idx, vid in enumerate(all_videos):
                 vid_id = vid["id"]
-                with st.container(border=True):  # নেটিভ কার্ড কন্টেইনার
+                with st.container(border=True):
                     st.markdown(f"<h3>ভিডিও #{idx+1}: {vid['title']}</h3>", unsafe_allow_html=True)
                     
                     with get_db_connection() as conn:
@@ -380,8 +450,6 @@ else:
                         st.video(playable_link)
                     except Exception:
                         st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
-                    
-                    # টাস্ক ডেসক্রিপশন বক্সটি সম্পূর্ণ ডিলিট করা হয়েছে
                     
                     col1, col2 = st.columns(2)
                     with col1:
@@ -407,6 +475,10 @@ else:
                                         cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
                                                        (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
                                         conn.commit()
+                                    
+                                    # অ্যাডমিন প্যানেলে রিয়েল-টাইম নোটিফিকেশন পাঠানো
+                                    add_notification('admin', f"📥 **{st.session_state.username}** ভিডিও '`{vid['title']}`' এর প্র্যাকটিস স্ক্রিনশট সাবমিট করেছে!")
+                                    
                                     st.success("আপনার টাস্কের স্ক্রিনশট সফলভাবে জমা হয়েছে!")
                                     st.rerun()
                                 else:
@@ -433,7 +505,7 @@ else:
                 all_ids = set(df_vids["id"].tolist())
                 missing_ids = all_ids - completed_ids
                 
-                with st.container(border=True):  # মেম্বার প্রোগ্রেস কার্ড
+                with st.container(border=True):
                     st.markdown(f"**👤 মেম্বার:** `{user}`")
                     if not missing_ids:
                         st.markdown("<span class='badge' style='background-color:#238636;'>সবগুলো টাস্ক সম্পন্ন করেছে! 🔥</span>", unsafe_allow_html=True)
@@ -461,7 +533,7 @@ else:
                 st.info("এখনো কেউ স্ক্রিনশট জমা দেয়নি।")
             else:
                 for sub in all_subs:
-                    with st.container(border=True):  # স্ক্রিনশট ফিড কার্ড
+                    with st.container(border=True):
                         st.markdown(f"👤 **{sub['username']}** স্ক্রিনশট জমা দিয়েছে - **ভিডিও: `{sub['title']}`**-এর জন্য")
                         st.caption(f"জমা দেওয়ার সময়: {sub['submitted_at']}")
                         
@@ -475,14 +547,13 @@ else:
     elif st.session_state.current_tab == "Admin" and st.session_state.role == "admin":
         st.subheader("গ্রুপ লিডার কন্ট্রোল প্যানেল (অ্যাডমিন)")
         
-        # সফল আপলোড নোটিফিকেশন প্রদর্শন
         if st.session_state.success_notification:
             st.success(st.session_state.success_notification)
-            st.session_state.success_notification = None  # একবার দেখানোর পর রিসেট
+            st.session_state.success_notification = None
         
         admin_action = st.radio(
-            "মেডিউল সিলেক্ট করুন:", 
-            ["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন"], 
+            "মডিউল সিলেক্ট করুন:", 
+            ["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন", "👥 মেম্বার ম্যানেজমেন্ট"], 
             horizontal=True
         )
         
@@ -495,22 +566,23 @@ else:
                 v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
                 v_url = st.text_input("ইউটিউব/ড্রাইভ ভিডিও লিংক", placeholder="যেমন: https://www.youtube.com/watch?v=...")
                 
-                # আজকের প্র্যাকটিস কাজের বিবরণের text_area ইনপুট বক্সটি সম্পূর্ণ বাদ দেওয়া হয়েছে
-                
                 if st.button("ভিডিও পাবলিশ করুন 📣"):
                     if v_title and v_url:
                         with get_db_connection() as conn:
                             cursor = conn.cursor()
-                            # ডাটাবেজের কলামের সংখ্যা ঠিক রাখার জন্য task_desc-এর জায়গায় None পাস করা হচ্ছে
                             cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
                                            (v_title, v_url, None, datetime.now().strftime("%Y-%m-%d")))
                             conn.commit()
+                        
+                        # নতুন ভিডিও আপলোডের নোটিফিকেশন ব্রডকাস্ট করুন
+                        add_notification('ALL', f"📣 নতুন ভিডিও আপলোড করা হয়েছে: **{v_title}**! ড্যাশবোর্ডে গিয়ে ভিডিওটি দেখে টাস্ক কমপ্লিট করো।")
+                        
                         st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও আপলোড হয়েছে: {v_title}"
                         st.rerun()
                     else:
                         st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
         
-        # অ্যাকশন ২: কে কে ভিডিও দেখেছে তার ট্র্যাকিং
+        # অ্যাকশন ২: ভিউ ট্র্যাকিং
         elif admin_action == "👁️ ভিউ ট্র্যাকিং":
             with st.container(border=True):
                 st.write("### 👁️ কোন ভিডিও কে কে দেখেছে দেখুন")
@@ -568,3 +640,48 @@ else:
                                 st.success("ভিডিওটি সফলভাবে মুছে ফেলা হয়েছে!")
                                 st.rerun()
                         st.markdown("---")
+
+        # অ্যাকশন ৪: মেম্বার ম্যানেজমেন্ট (রিমুভ ও রিমাইন্ডার পাঠানোর মডিউল)
+        elif admin_action == "👥 মেম্বার ম্যানেজমেন্ট":
+            st.write("### 👥 গ্রুপ মেম্বার ম্যানেজমেন্ট ও কন্ট্রোল")
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT username FROM users WHERE role != 'admin' ORDER BY username ASC")
+                members = cursor.fetchall()
+                
+            if not members:
+                st.info("এখনো কোনো মেম্বার রেজিস্ট্রেশন করেনি।")
+            else:
+                for member in members:
+                    m_username = member["username"]
+                    with st.container(border=True):
+                        st.markdown(f"**👤 মেম্বার:** `{m_username}`")
+                        
+                        col_rem, col_del = st.columns(2)
+                        with col_rem:
+                            # রিমাইন্ডার পাঠানোর সাব-সেকশন
+                            with st.expander(f"🔔 {m_username} কে রিমাইন্ডার দিন"):
+                                rem_message = st.text_input("রিমাইন্ডার মেসেজটি লিখুন", 
+                                                            placeholder="যেমন: তোমার ভিডিওর প্র্যাকটিস কাজটি এখনো বাকি আছে!",
+                                                            key=f"rem_input_{m_username}")
+                                if st.button("রিমাইন্ডার পাঠান 🚀", key=f"send_rem_btn_{m_username}"):
+                                    if rem_message:
+                                        add_notification(m_username, f"⚠️ **গ্রুপ লিডার রিমাইন্ডার:** {rem_message}")
+                                        st.success(f"{m_username}-এর কাছে রিমাইন্ডার সফলভাবে পাঠানো হয়েছে!")
+                                    else:
+                                        st.error("মেসেজ খালি রাখা যাবে না!")
+                        with col_del:
+                            # মেম্বার সম্পূর্ণ রিমুভ করার বাটন
+                            if st.button(f"🗑️ {m_username} কে রিমুভ করুন", key=f"del_member_btn_{m_username}"):
+                                with get_db_connection() as conn:
+                                    cursor = conn.cursor()
+                                    # মেম্বার সম্পর্কিত সকল ডেটা ডিলিট
+                                    cursor.execute("DELETE FROM users WHERE username = ?", (m_username,))
+                                    cursor.execute("DELETE FROM views WHERE username = ?", (m_username,))
+                                    cursor.execute("DELETE FROM submissions WHERE username = ?", (m_username,))
+                                    cursor.execute("DELETE FROM sessions WHERE username = ?", (m_username,))
+                                    cursor.execute("DELETE FROM notification_reads WHERE username = ?", (m_username,))
+                                    cursor.execute("DELETE FROM notifications WHERE username = ?", (m_username,))
+                                    conn.commit()
+                                st.success(f"সাফল্যের সাথে মেম্বার `{m_username}` এবং তার সমস্ত ডেটা রিমুভ করা হয়েছে!")
+                                st.rerun()
