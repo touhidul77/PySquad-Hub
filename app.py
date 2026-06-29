@@ -5,6 +5,7 @@ import base64
 from datetime import datetime
 import pandas as pd
 
+# মোবাইলের জন্য রেসপনসিভ পেজ কনফিগারেশন
 st.set_page_config(
     page_title="PySquad Hub",
     page_icon="https://img.icons8.com/color/144/python.png",  # আসল পাইথন লোগো ট্যাব আইকন হিসেবে
@@ -19,17 +20,32 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* ব্যাকগ্রাউন্ড ও প্রোগ্রামিং থিম কালার (IDE Grid with Glow Effect) */
+    /* ব্যাকগ্রাউন্ড গ্লো অ্যানিমেশন (ধীরগতির অ্যাম্বিয়েন্ট মুভমেন্ট) */
+    @keyframes ambientGlow {
+        0% {
+            background-position: 0px 0px, 0px 0px, 10% 20%, 90% 80%;
+        }
+        50% {
+            background-position: 0px 0px, 0px 0px, 80% 80%, 20% 20%;
+        }
+        100% {
+            background-position: 0px 0px, 0px 0px, 10% 20%, 90% 80%;
+        }
+    }
+    
+    /* ব্যাকগ্রাউন্ড ও প্রোগ্রামিং থিম কালার (IDE Grid with Animated Glow Effect) */
     .stApp {
         background-color: #0b0e14;
         background-image: 
             /* সূক্ষ্ম কোডিং গ্রিড প্যাটার্ন */
             linear-gradient(rgba(88, 166, 255, 0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(88, 166, 255, 0.03) 1px, transparent 1px),
-            /* অ্যাম্বিয়েন্ট কোডিং গ্লোয়িং লাইটস */
-            radial-gradient(at 0% 0%, rgba(31, 111, 235, 0.12) 0px, transparent 50%),
-            radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
-        background-size: 30px 30px, 30px 30px, 100% 100%, 100% 100%;
+            /* অ্যাম্বিয়েন্ট কোডিং এনিমেটেড গ্লোয়িং লাইটস */
+            radial-gradient(circle at center, rgba(31, 111, 235, 0.16) 0px, transparent 55%),
+            radial-gradient(circle at center, rgba(139, 92, 246, 0.11) 0px, transparent 55%);
+        background-size: 30px 30px, 30px 30px, 160% 160%, 160% 160%;
+        background-attachment: fixed;
+        animation: ambientGlow 25s ease-in-out infinite;
         color: #c9d1d9;
     }
     
@@ -96,14 +112,13 @@ st.markdown("""
         box-shadow: 0 0 12px rgba(88, 166, 255, 0.4);
     }
     
-    /* রেডিও বাটনের সুন্দর অ্যাক্টিভ বর্ডার */
+    /* রেডিও বাটনের সুন্দর ডিজাইন */
     div[data-testid="stMarkdownContainer"] p {
         font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- ডাটাবেজ ইউটিলিটি -----------------
 DB_FILE = "learning_tracker.db"
 
 def get_db_connection():
@@ -263,7 +278,6 @@ def register_user(username, password):
     except sqlite3.IntegrityError:
         return False
 
-# ----------------- অ্যাপ রেন্ডারিং -----------------
 st.markdown("""
 <div class="logo-container">
     <img src="https://img.icons8.com/color/144/python.png" class="logo-img" alt="Python Logo">
@@ -460,9 +474,8 @@ else:
         # সফল আপলোড নোটিফিকেশন প্রদর্শন
         if st.session_state.success_notification:
             st.success(st.session_state.success_notification)
-            st.session_state.success_notification = None  # একবার দেখানোর পর রিসেট করুন
+            st.session_state.success_notification = None  # একবার দেখানোর পর রিসেট
         
-        # ২য় ছবির ভাঙা বক্স বা খালি কন্টেইনার সম্পূর্ণ রিমুভ করে নতুন মোবাইল ফ্রেন্ডলি মেনু অ্যাড
         admin_action = st.radio(
             "মেডিউল সিলেক্ট করুন:", 
             ["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন"], 
