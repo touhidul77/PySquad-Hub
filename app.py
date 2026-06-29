@@ -141,7 +141,7 @@ def init_db():
                 role TEXT NOT NULL
             )
         """)
-        # ভিডিও ও টাস্ক টেবিল
+        # ভিডিও ও টাস্ক টেবিল (ব্যাকওয়ার্ড সামঞ্জস্যের জন্য task_desc কলামটি রাখা হয়েছে)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS videos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -381,8 +381,7 @@ else:
                     except Exception:
                         st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
                     
-                    with st.expander("📝 প্র্যাকটিস টাস্কের বিস্তারিত দেখুন", expanded=True):
-                        st.markdown(f"**আজকের কাজ:** \n{vid['task_desc']}")
+                    # টাস্ক ডেসক্রিপশন বক্সটি সম্পূর্ণ ডিলিট করা হয়েছে
                     
                     col1, col2 = st.columns(2)
                     with col1:
@@ -492,19 +491,21 @@ else:
         # অ্যাকশন ১: নতুন ভিডিও আপলোড
         if admin_action == "📤 নতুন ভিডিও দিন":
             with st.container(border=True):
-                st.write("### 🎬 নতুন ভিডিও ও টাস্ক আপলোড করুন")
+                st.write("### 🎬 নতুন ভিডিও আপলোড করুন")
                 v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
                 v_url = st.text_input("ইউটিউব/ড্রাইভ ভিডিও লিংক", placeholder="যেমন: https://www.youtube.com/watch?v=...")
-                v_task = st.text_area("আজকের প্র্যাকটিস কাজের বিবরণ", placeholder="বন্ধুদের কী কী কোড প্র্যাকটিস করতে হবে তা এখানে লিখুন...")
                 
-                if st.button("ভিডিও এবং টাস্ক পাবলিশ করুন 📣"):
+                # আজকের প্র্যাকটিস কাজের বিবরণের text_area ইনপুট বক্সটি সম্পূর্ণ বাদ দেওয়া হয়েছে
+                
+                if st.button("ভিডিও পাবলিশ করুন 📣"):
                     if v_title and v_url:
                         with get_db_connection() as conn:
                             cursor = conn.cursor()
+                            # ডাটাবেজের কলামের সংখ্যা ঠিক রাখার জন্য task_desc-এর জায়গায় None পাস করা হচ্ছে
                             cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
-                                           (v_title, v_url, v_task, datetime.now().strftime("%Y-%m-%d")))
+                                           (v_title, v_url, None, datetime.now().strftime("%Y-%m-%d")))
                             conn.commit()
-                        st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও এবং টাস্ক আপলোড হয়েছে: {v_title}"
+                        st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও আপলোড হয়েছে: {v_title}"
                         st.rerun()
                     else:
                         st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
