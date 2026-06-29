@@ -19,20 +19,28 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* ব্যাকগ্রাউন্ড ও টেক্সট কালার */
+    /* ব্যাকগ্রাউন্ড ও প্রোগ্রামিং থিম কালার (IDE Grid with Glow Effect) */
     .stApp {
-        background-color: #0d1117;
+        background-color: #0b0e14;
+        background-image: 
+            /* সূক্ষ্ম কোডিং গ্রিড প্যাটার্ন */
+            linear-gradient(rgba(88, 166, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(88, 166, 255, 0.03) 1px, transparent 1px),
+            /* অ্যাম্বিয়েন্ট কোডিং গ্লোয়িং লাইটস */
+            radial-gradient(at 0% 0%, rgba(31, 111, 235, 0.12) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
+        background-size: 30px 30px, 30px 30px, 100% 100%, 100% 100%;
         color: #c9d1d9;
     }
     
-    /* কার্ড ডিজাইন */
-    .card {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    /* স্ট্রিমলিটের নিজস্ব বর্ডার কন্টেইনার এবং ফর্মকে সুন্দর কার্ডে রূপান্তর */
+    div[data-testid="stVerticalBlockBorderWrapper"], div[data-testid="stForm"] {
+        background-color: #161b22 !important;
+        border: 1px solid #30363d !important;
+        border-radius: 16px !important;
+        padding: 24px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+        margin-bottom: 20px !important;
     }
     
     /* টাইটেল এবং লোগো কন্টেইনার */
@@ -42,17 +50,20 @@ st.markdown("""
         justify-content: center;
         gap: 15px;
         margin-bottom: 5px;
+        margin-top: 20px;
     }
     .logo-img {
-        width: 48px;
-        height: 48px;
+        width: 54px;
+        height: 54px;
+        filter: drop-shadow(0 0 8px rgba(88, 166, 255, 0.6));
     }
     .app-title {
-        font-size: 2.2rem;
+        font-size: 2.3rem;
         font-weight: 800;
         color: #58a6ff;
         margin: 0;
         font-family: 'Inter', sans-serif;
+        text-shadow: 0 0 10px rgba(88, 166, 255, 0.2);
     }
     .app-subtitle {
         font-size: 1rem;
@@ -82,6 +93,12 @@ st.markdown("""
     div.stButton > button:hover {
         background-color: #58a6ff !important;
         color: #0d1117 !important;
+        box-shadow: 0 0 12px rgba(88, 166, 255, 0.4);
+    }
+    
+    /* রেডিও বাটনের সুন্দর অ্যাক্টিভ বর্ডার */
+    div[data-testid="stMarkdownContainer"] p {
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -256,34 +273,33 @@ st.markdown("""
 st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস ট্র্যাক করি</div>", unsafe_allow_html=True)
 
 if not st.session_state.logged_in:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    auth_mode = st.radio("আপনার অ্যাকশন সিলেক্ট করুন", ["লগইন করুন", "নতুন অ্যাকাউন্ট খুলুন"], horizontal=True)
-    
-    username_input = st.text_input("ইউজারনেম (Username)", placeholder="যেমন: Touhidul")
-    password_input = st.text_input("পাসওয়ার্ড (Password)", type="password", placeholder="পাসওয়ার্ড লিখুন")
-    
-    if auth_mode == "লগইন করুন":
-        if st.button("ড্যাশবোর্ডে প্রবেশ করুন 🚀"):
-            if username_input and password_input:
-                if login_user(username_input, password_input):
-                    st.success(f"স্বাগতম, {st.session_state.username}!")
-                    st.rerun()
+    with st.container(border=True):  # নেটিভ কন্টেইনার ব্যবহার করায় কোনো খালি বক্স থাকবে না
+        auth_mode = st.radio("আপনার অ্যাকশন সিলেক্ট করুন", ["লগইন করুন", "নতুন অ্যাকাউন্ট খুলুন"], horizontal=True)
+        
+        username_input = st.text_input("ইউজারনেম (Username)", placeholder="যেমন: Touhidul")
+        password_input = st.text_input("পাসওয়ার্ড (Password)", type="password", placeholder="পাসওয়ার্ড লিখুন")
+        
+        if auth_mode == "লগইন করুন":
+            if st.button("ড্যাশবোর্ডে প্রবেশ করুন 🚀"):
+                if username_input and password_input:
+                    if login_user(username_input, password_input):
+                        st.success(f"স্বাগতম, {st.session_state.username}!")
+                        st.rerun()
+                    else:
+                        st.error("ভুল ইউজারনেম অথবা পাসওয়ার্ড! আবার চেষ্টা করুন।")
                 else:
-                    st.error("ভুল ইউজারনেম অথবা পাসওয়ার্ড! আবার চেষ্টা করুন।")
-            else:
-                st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
-    else:
-        if st.button("রেজিস্ট্রেশন সম্পন্ন করুন ✨"):
-            if username_input and password_input:
-                if len(password_input) < 4:
-                    st.error("পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে।")
-                elif register_user(username_input, password_input):
-                    st.success("অ্যাকাউন্ট তৈরি সফল হয়েছে! এখন লগইন করুন।")
+                    st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
+        else:
+            if st.button("রেজিস্ট্রেশন সম্পন্ন করুন ✨"):
+                if username_input and password_input:
+                    if len(password_input) < 4:
+                        st.error("পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে।")
+                    elif register_user(username_input, password_input):
+                        st.success("অ্যাকাউন্ট তৈরি সফল হয়েছে! এখন লগইন করুন।")
+                    else:
+                        st.error("এই ইউজারনেমটি ইতিমধ্যে ব্যবহৃত হয়েছে। অন্য নাম দিন।")
                 else:
-                    st.error("এই ইউজারনেমটি ইতিমধ্যে ব্যবহৃত হয়েছে। অন্য নাম দিন।")
-            else:
-                st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
-    st.markdown("</div>", unsafe_allow_html=True)
+                    st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
 
 else:
     st.markdown("---")
@@ -324,61 +340,59 @@ else:
         else:
             for idx, vid in enumerate(all_videos):
                 vid_id = vid["id"]
-                st.markdown(f"<div class='card'>", unsafe_allow_html=True)
-                st.markdown(f"<h3>ভিডিও #{idx+1}: {vid['title']}</h3>", unsafe_allow_html=True)
-                
-                with get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM views WHERE username = ? AND video_id = ?", 
-                                   (st.session_state.username, vid_id))
-                    watched = cursor.fetchone() is not None
-                
-                if watched:
-                    st.markdown("<span class='badge' style='background-color:#1f6feb;'>দেখেছি ✅</span>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<span class='badge' style='background-color:#da3633;'>দেখা হয়নি ❌</span>", unsafe_allow_html=True)
-                
-                st.write("")
-                
-                playable_link = get_playable_url(vid["url"])
-                try:
-                    st.video(playable_link)
-                except Exception:
-                    st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
-                
-                with st.expander("📝 প্র্যাকটিস টাস্কের বিস্তারিত দেখুন", expanded=True):
-                    st.markdown(f"**আজকের কাজ:** \n{vid['task_desc']}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if not watched:
-                        if st.button("দেখা শেষ করলাম 👀", key=f"watch_btn_{vid_id}"):
-                            with get_db_connection() as conn:
-                                cursor = conn.cursor()
-                                cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
-                                               (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
-                                conn.commit()
-                            st.success("ভিডিও দেখা সফলভাবে সেভ হয়েছে!")
-                            st.rerun()
-                with col2:
-                    with st.expander("📤 স্ক্রিনশট জমা দিন"):
-                        up_file = st.file_uploader("আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন", type=["png", "jpg", "jpeg"], key=f"up_{vid_id}")
-                        if st.button("টাস্ক সাবমিট করুন 🚀", key=f"sub_btn_{vid_id}"):
-                            if up_file:
-                                b64_img = file_to_base64(up_file)
+                with st.container(border=True):  # নেটিভ কার্ড কন্টেইনার
+                    st.markdown(f"<h3>ভিডিও #{idx+1}: {vid['title']}</h3>", unsafe_allow_html=True)
+                    
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT * FROM views WHERE username = ? AND video_id = ?", 
+                                       (st.session_state.username, vid_id))
+                        watched = cursor.fetchone() is not None
+                    
+                    if watched:
+                        st.markdown("<span class='badge' style='background-color:#1f6feb;'>দেখেছি ✅</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<span class='badge' style='background-color:#da3633;'>দেখা হয়নি ❌</span>", unsafe_allow_html=True)
+                    
+                    st.write("")
+                    
+                    playable_link = get_playable_url(vid["url"])
+                    try:
+                        st.video(playable_link)
+                    except Exception:
+                        st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
+                    
+                    with st.expander("📝 প্র্যাকটিস টাস্কের বিস্তারিত দেখুন", expanded=True):
+                        st.markdown(f"**আজকের কাজ:** \n{vid['task_desc']}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if not watched:
+                            if st.button("দেখা শেষ করলাম 👀", key=f"watch_btn_{vid_id}"):
                                 with get_db_connection() as conn:
                                     cursor = conn.cursor()
-                                    cursor.execute("INSERT INTO submissions (username, video_id, screenshot, submitted_at) VALUES (?, ?, ?, ?)",
-                                                   (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
                                     cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
                                                    (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
                                     conn.commit()
-                                st.success("আপনার টাস্কের স্ক্রিনশট সফলভাবে জমা হয়েছে!")
+                                st.success("ভিডিও দেখা সফলভাবে সেভ হয়েছে!")
                                 st.rerun()
-                            else:
-                                st.error("দয়া করে একটি ইমেজ বা স্ক্রিনশট সিলেক্ট করুন।")
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+                    with col2:
+                        with st.expander("📤 স্ক্রিনশট জমা দিন"):
+                            up_file = st.file_uploader("আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন", type=["png", "jpg", "jpeg"], key=f"up_{vid_id}")
+                            if st.button("টাস্ক সাবমিট করুন 🚀", key=f"sub_btn_{vid_id}"):
+                                if up_file:
+                                    b64_img = file_to_base64(up_file)
+                                    with get_db_connection() as conn:
+                                        cursor = conn.cursor()
+                                        cursor.execute("INSERT INTO submissions (username, video_id, screenshot, submitted_at) VALUES (?, ?, ?, ?)",
+                                                       (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                        cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
+                                                       (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                        conn.commit()
+                                    st.success("আপনার টাস্কের স্ক্রিনশট সফলভাবে জমা হয়েছে!")
+                                    st.rerun()
+                                else:
+                                    st.error("দয়া করে একটি ইমেজ বা স্ক্রিনশট সিলেক্ট করুন।")
 
     # ----------------- পেজ ২: প্রোগ্রেস ট্র্যাকার (TRACKER) -----------------
     elif st.session_state.current_tab == "Tracker":
@@ -401,19 +415,18 @@ else:
                 all_ids = set(df_vids["id"].tolist())
                 missing_ids = all_ids - completed_ids
                 
-                st.markdown(f"<div class='card' style='padding: 15px;'>", unsafe_allow_html=True)
-                st.markdown(f"**👤 মেম্বার:** `{user}`")
-                if not missing_ids:
-                    st.markdown("<span class='badge' style='background-color:#238636;'>সবগুলো টাস্ক সম্পন্ন করেছে! 🔥</span>", unsafe_allow_html=True)
-                else:
-                    missing_labels = []
-                    for m_id in missing_ids:
-                        matching_rows = df_vids[df_vids["id"] == m_id]
-                        if not matching_rows.empty:
-                            idx = matching_rows.index[0] + 1
-                            missing_labels.append(f"ভিডিও {idx}")
-                    st.markdown(f"🔴 **বাকি আছে:** {', '.join(missing_labels)}")
-                st.markdown("</div>", unsafe_allow_html=True)
+                with st.container(border=True):  # মেম্বার প্রোগ্রেস কার্ড
+                    st.markdown(f"**👤 মেম্বার:** `{user}`")
+                    if not missing_ids:
+                        st.markdown("<span class='badge' style='background-color:#238636;'>সবগুলো টাস্ক সম্পন্ন করেছে! 🔥</span>", unsafe_allow_html=True)
+                    else:
+                        missing_labels = []
+                        for m_id in missing_ids:
+                            matching_rows = df_vids[df_vids["id"] == m_id]
+                            if not matching_rows.empty:
+                                idx = matching_rows.index[0] + 1
+                                missing_labels.append(f"ভিডিও {idx}")
+                        st.markdown(f"🔴 **বাকি আছে:** {', '.join(missing_labels)}")
             
             st.write("### 📸 সবার জমা দেওয়া প্র্যাকটিস স্ক্রিনশটসমূহ")
             with get_db_connection() as conn:
@@ -430,22 +443,21 @@ else:
                 st.info("এখনো কেউ স্ক্রিনশট জমা দেয়নি।")
             else:
                 for sub in all_subs:
-                    st.markdown("<div class='card'>", unsafe_allow_html=True)
-                    st.markdown(f"👤 **{sub['username']}** স্ক্রিনশট জমা দিয়েছে - **ভিডিও: `{sub['title']}`**-এর জন্য")
-                    st.caption(f"জমা দেওয়ার সময়: {sub['submitted_at']}")
-                    
-                    img_data = sub["screenshot"]
-                    try:
-                        st.image(base64.b64decode(img_data), use_column_width=True)
-                    except Exception:
-                        st.error("ছবিটি লোড করতে সমস্যা হচ্ছে।")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    with st.container(border=True):  # স্ক্রিনশট ফিড কার্ড
+                        st.markdown(f"👤 **{sub['username']}** স্ক্রিনশট জমা দিয়েছে - **ভিডিও: `{sub['title']}`**-এর জন্য")
+                        st.caption(f"জমা দেওয়ার সময়: {sub['submitted_at']}")
+                        
+                        img_data = sub["screenshot"]
+                        try:
+                            st.image(base64.b64decode(img_data), use_column_width=True)
+                        except Exception:
+                            st.error("ছবিটি লোড করতে সমস্যা হচ্ছে।")
 
     # ----------------- পেজ ৩: অ্যাডমিন প্যানেল (ADMIN) -----------------
     elif st.session_state.current_tab == "Admin" and st.session_state.role == "admin":
         st.subheader("গ্রুপ লিডার কন্ট্রোল প্যানেল (অ্যাডমিন)")
         
-        # সফল আপলোড নোটিফিকেশন প্রদর্শন (পেজ রিরানের পরেও এটি কাজ করবে)
+        # সফল আপলোড নোটিফিকেশন প্রদর্শন
         if st.session_state.success_notification:
             st.success(st.session_state.success_notification)
             st.session_state.success_notification = None  # একবার দেখানোর পর রিসেট করুন
@@ -461,83 +473,79 @@ else:
         
         # অ্যাকশন ১: নতুন ভিডিও আপলোড
         if admin_action == "📤 নতুন ভিডিও দিন":
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.write("### 🎬 নতুন ভিডিও ও টাস্ক আপলোড করুন")
-            v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
-            v_url = st.text_input("ইউটিউব/ড্রাইভ ভিডিও লিংক", placeholder="যেমন: https://www.youtube.com/watch?v=...")
-            v_task = st.text_area("আজকের প্র্যাকটিস কাজের বিবরণ", placeholder="বন্ধুদের কী কী কোড প্র্যাকটিস করতে হবে তা এখানে লিখুন...")
-            
-            if st.button("ভিডিও এবং টাস্ক পাবলিশ করুন 📣"):
-                if v_title and v_url:
-                    with get_db_connection() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
-                                       (v_title, v_url, v_task, datetime.now().strftime("%Y-%m-%d")))
-                        conn.commit()
-                    # ৩য় ছবির রিকোয়েস্ট অনুযায়ী সেশন স্টেটে সাকসেস মেসেজ সেট করা
-                    st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও এবং টাস্ক আপলোড হয়েছে: {v_title}"
-                    st.rerun()
-                else:
-                    st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.write("### 🎬 নতুন ভিডিও ও টাস্ক আপলোড করুন")
+                v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
+                v_url = st.text_input("ইউটিউব/ড্রাইভ ভিডিও লিংক", placeholder="যেমন: https://www.youtube.com/watch?v=...")
+                v_task = st.text_area("আজকের প্র্যাকটিস কাজের বিবরণ", placeholder="বন্ধুদের কী কী কোড প্র্যাকটিস করতে হবে তা এখানে লিখুন...")
+                
+                if st.button("ভিডিও এবং টাস্ক পাবলিশ করুন 📣"):
+                    if v_title and v_url:
+                        with get_db_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
+                                           (v_title, v_url, v_task, datetime.now().strftime("%Y-%m-%d")))
+                            conn.commit()
+                        st.session_state.success_notification = f"🎉 সফলভাবে ভিডিও এবং টাস্ক আপলোড হয়েছে: {v_title}"
+                        st.rerun()
+                    else:
+                        st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
         
         # অ্যাকশন ২: কে কে ভিডিও দেখেছে তার ট্র্যাকিং
         elif admin_action == "👁️ ভিউ ট্র্যাকিং":
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.write("### 👁️ কোন ভিডিও কে কে দেখেছে দেখুন")
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, title FROM videos")
-                vids_list = cursor.fetchall()
-                
-            if vids_list:
-                selected_vid = st.selectbox("ভিডিও সিলেক্ট করুন", 
-                                            options=[v["id"] for v in vids_list], 
-                                            format_func=lambda x: f"ভিডিও {x} - " + [v["title"] for v in vids_list if v["id"] == x][0])
-                
+            with st.container(border=True):
+                st.write("### 👁️ কোন ভিডিও কে কে দেখেছে দেখুন")
                 with get_db_connection() as conn:
                     cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT username, viewed_at FROM views 
-                        WHERE video_id = ?
-                    """, (selected_vid,))
-                    viewers = cursor.fetchall()
+                    cursor.execute("SELECT id, title FROM videos")
+                    vids_list = cursor.fetchall()
                     
-                if viewers:
-                    st.success(f"মোট ভিউয়ার্স সংখ্যা: {len(viewers)} জন")
-                    for vw in viewers:
-                        st.write(f"- 👤 **{vw['username']}** (দেখেছে: {vw['viewed_at']})")
+                if vids_list:
+                    selected_vid = st.selectbox("ভিডিও সিলেক্ট করুন", 
+                                                options=[v["id"] for v in vids_list], 
+                                                format_func=lambda x: f"ভিডিও {x} - " + [v["title"] for v in vids_list if v["id"] == x][0])
+                    
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT username, viewed_at FROM views 
+                            WHERE video_id = ?
+                        """, (selected_vid,))
+                        viewers = cursor.fetchall()
+                        
+                    if viewers:
+                        st.success(f"মোট ভিউয়ার্স সংখ্যা: {len(viewers)} জন")
+                        for vw in viewers:
+                            st.write(f"- 👤 **{vw['username']}** (দেখেছে: {vw['viewed_at']})")
+                    else:
+                        st.warning("এখনো কেউ এই ভিডিওটি দেখেছে হিসেবে মার্ক করেনি।")
                 else:
-                    st.warning("এখনো কেউ এই ভিডিওটি দেখেছে হিসেবে মার্ক করেনি।")
-            else:
-                st.info("ভিউয়ার্স ট্র্যাক করার জন্য আগে ভিডিও আপলোড করুন।")
-            st.markdown("</div>", unsafe_allow_html=True)
+                    st.info("ভিউয়ার্স ট্র্যাক করার জন্য আগে ভিডিও আপলোড করুন।")
             
         # অ্যাকশন ৩: ভিডিও ডিলিট করা
         elif admin_action == "🗑️ ভিডিও মুছুন":
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.write("### 🗑️ ভিডিও ডিলিট ম্যানেজমেন্ট")
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, title, date_added FROM videos ORDER BY id ASC")
-                all_vids_to_del = cursor.fetchall()
-                
-            if not all_vids_to_del:
-                st.info("মুছে ফেলার মতো কোনো ভিডিও পাওয়া যায়নি।")
-            else:
-                for v_del in all_vids_to_del:
-                    col_vid_info, col_vid_act = st.columns([3, 1])
-                    with col_vid_info:
-                        st.write(f"🎬 **{v_del['title']}** (তারিখ: {v_del['date_added']})")
-                    with col_vid_act:
-                        if st.button("🗑️ মুছুন", key=f"del_v_{v_del['id']}"):
-                            with get_db_connection() as conn:
-                                cursor = conn.cursor()
-                                cursor.execute("DELETE FROM videos WHERE id = ?", (v_del["id"],))
-                                cursor.execute("DELETE FROM views WHERE video_id = ?", (v_del["id"],))
-                                cursor.execute("DELETE FROM submissions WHERE video_id = ?", (v_del["id"],))
-                                conn.commit()
-                            st.success("ভিডিওটি সফলভাবে মুছে ফেলা হয়েছে!")
-                            st.rerun()
-                    st.markdown("---")
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.write("### 🗑️ ভিডিও ডিলিট ম্যানেজমেন্ট")
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT id, title, date_added FROM videos ORDER BY id ASC")
+                    all_vids_to_del = cursor.fetchall()
+                    
+                if not all_vids_to_del:
+                    st.info("মুছে ফেলার মতো কোনো ভিডিও পাওয়া যায়নি।")
+                else:
+                    for v_del in all_vids_to_del:
+                        col_vid_info, col_vid_act = st.columns([3, 1])
+                        with col_vid_info:
+                            st.write(f"🎬 **{v_del['title']}** (তারিখ: {v_del['date_added']})")
+                        with col_vid_act:
+                            if st.button("🗑️ মুছুন", key=f"del_v_{v_del['id']}"):
+                                with get_db_connection() as conn:
+                                    cursor = conn.cursor()
+                                    cursor.execute("DELETE FROM videos WHERE id = ?", (v_del["id"],))
+                                    cursor.execute("DELETE FROM views WHERE video_id = ?", (v_del["id"],))
+                                    cursor.execute("DELETE FROM submissions WHERE video_id = ?", (v_del["id"],))
+                                    conn.commit()
+                                st.success("ভিডিওটি সফলভাবে মুছে ফেলা হয়েছে!")
+                                st.rerun()
+                        st.markdown("---")
