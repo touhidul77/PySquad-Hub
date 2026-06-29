@@ -1,363 +1,542 @@
 import streamlit as st
 import sqlite3
-import datetime
 import hashlib
-import json
+import base64
+from datetime import datetime
+import pandas as pd
 
-# --- CONFIGURATION & PAGE SETUP ---
+# মোবাইলের জন্য রেসপনসিভ পেজ কনফিগারেশন
 st.set_page_config(
-    page_title="Shared Learning Portal",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="PySquad Hub",
+    page_icon="🐍",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-DB_FILE = "local_learning_tracker.db"
-
-# --- CUSTOM CSS FOR RESPONSIVENESS & FULL-SCREEN TOGGLE ---
+# মডার্ন ডার্ক থিম সিএসএস (মোবাইল ফ্রেন্ডলি ডিজাইন)
 st.markdown("""
 <style>
-    /* Responsive grid and padding tweaks */
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
+    /* স্ট্রিমলিটের ডিফল্ট হেডার-ফুটার হাইড করার জন্য */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* ব্যাকগ্রাউন্ড ও টেক্সট কালার */
+    .stApp {
+        background-color: #0d1117;
+        color: #c9d1d9;
     }
-    /* Simple Card styling for videos */
-    .video-card {
-        background-color: rgba(151, 166, 195, 0.1);
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
-        border: 1px solid rgba(151, 166, 195, 0.2);
+    
+    /* কার্ড ডিজাইন */
+    .card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
-    /* Dynamic full-screen style if toggled */
-    .fullscreen-element {
+    
+    /* টাইটেল এবং ব্যাজ স্টাইল */
+    .app-title {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #58a6ff;
+        text-align: center;
+        margin-bottom: 5px;
+        font-family: 'Inter', sans-serif;
+    }
+    .app-subtitle {
+        font-size: 1rem;
+        color: #8b949e;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    .badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+    }
+    
+    /* বাটনের মডার্ন স্টাইল */
+    div.stButton > button {
+        background-color: #21262d !important;
+        color: #c9d1d9 !important;
+        border: 1px solid #30363d !important;
+        border-radius: 8px !important;
         width: 100% !important;
-        max-width: 100% !important;
+        padding: 10px 20px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:hover {
+        background-color: #58a6ff !important;
+        color: #0d1117 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- DATABASE INITIALIZATION ---
+# ----------------- ডাটাবেজ ইউটিলিটি -----------------
+DB_FILE = "learning_tracker.db"
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    # Users table (Plain/MD5 hash for simplicity as requested, Admin default injected)
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    role TEXT NOT NULL)''')
-    
-    # Videos table
-    c.execute('''CREATE TABLE IF NOT EXISTS videos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    url TEXT NOT NULL,
-                    description TEXT,
-                    task_desc TEXT,
-                    date_added TEXT)''')
-    
-    # Submissions table
-    c.execute('''CREATE TABLE IF NOT EXISTS submissions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL,
-                    video_id INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    submission_text TEXT,
-                    timestamp TEXT,
-                    FOREIGN KEY(video_id) REFERENCES videos(id))''')
-    
-    # Insert default admin if not exists (Password: adminpassword)
-    # Using SHA-256 for a baseline security standard
-    admin_pw_hash = hashlib.sha256("adminpassword".encode()).hexdigest()
-    try:
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
-                  ("admin", admin_pw_hash, "admin"))
-    except sqlite3.IntegrityError:
-        pass # Admin already exists
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # ইউজার টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL
+            )
+        """)
+        # ভিডিও ও টাস্ক টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                task_desc TEXT,
+                date_added TEXT NOT NULL
+            )
+        """)
+        # ভিডিও ভিউ ট্র্যাকিং টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS views (
+                username TEXT,
+                video_id INTEGER,
+                viewed_at TEXT,
+                PRIMARY KEY (username, video_id)
+            )
+        """)
+        # টাস্ক সাবমিশন টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                video_id INTEGER,
+                screenshot TEXT, -- Base64 ফরম্যাটে ছবি
+                submitted_at TEXT,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        """)
+        # রিলোড ট্র্যাকিং এর জন্য সেশন টেবিল
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                username TEXT,
+                token TEXT PRIMARY KEY,
+                created_at TEXT
+            )
+        """)
         
-    conn.commit()
-    conn.close()
+        # ডিফল্ট অ্যাডমিন অ্যাকাউন্ট তৈরি
+        admin_pass_hash = hashlib.sha256("Touhidul#20".encode()).hexdigest()
+        cursor.execute("SELECT * FROM users WHERE username = 'admin'")
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                           ("admin", admin_pass_hash, "admin"))
+        conn.commit()
 
 init_db()
 
-# --- DATABASE HELPER FUNCTIONS ---
-def run_query(query, params=(), fetch="all"):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute(query, params)
-    if fetch == "all":
-        result = c.fetchall()
-    elif fetch == "one":
-        result = c.fetchone()
-    else:
-        result = None
-    conn.commit()
-    conn.close()
-    return result
+# ভিডিও লিংক প্রসেস করার ফাংশন (যা স্ট্রিমলিট প্লেয়ার ও মোবাইলের জন্য সেরা)
+def get_playable_url(url):
+    if "youtu.be/" in url:
+        video_id = url.split("youtu.be/")[1].split("?")[0]
+        return f"https://www.youtube.com/watch?v={video_id}"
+    elif "youtube.com/watch" in url:
+        return url
+    elif "youtube.com/embed/" in url:
+        video_id = url.split("embed/")[1].split("?")[0]
+        return f"https://www.youtube.com/watch?v={video_id}"
+    elif "drive.google.com" in url:
+        # ড্রাইভ লিংকের জন্য ডাইরেক্ট স্ট্রিম লিংক বের করা
+        try:
+            if "/file/d/" in url:
+                file_id = url.split("/file/d/")[1].split("/")[0]
+            elif "id=" in url:
+                file_id = url.split("id=")[1].split("&")[0]
+            else:
+                return url
+            return f"https://docs.google.com/uc?api=viewer&id={file_id}"
+        except Exception:
+            return url
+    return url
 
-# --- LOCALSTORAGE STATE SYNCHRONIZATION WORKAROUND ---
-# Injects JavaScript to synchronize Streamlit session state with browser LocalStorage
-def sync_local_storage():
-    if "user_synced" not in st.session_state:
-        st.session_state.user_synced = False
+# আপলোড করা ছবিকে Base64 টেক্সটে রূপান্তর
+def file_to_base64(uploaded_file):
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.read()
+        return base64.b64encode(file_bytes).decode("utf-8")
+    return None
 
-    # JS snippet to get/set localStorage values cleanly
-    st.components.v1.html(
-        f"""
-        <script>
-        const setStreamlitState = (key, value) => {{
-            window.parent.postMessage({{
-                type: 'streamlit:set_widget_value',
-                key: key,
-                value: value
-            }}, '*');
-        }};
-        
-        // Read local storage on initial run
-        let localUser = localStorage.getItem('learning_portal_user');
-        let localRole = localStorage.getItem('learning_portal_role');
-        
-        if (localUser && !"{st.session_state.get('username', '')}") {{
-             window.parent.postMessage({{type: 'streamlit:set_user', username: localUser, role: localRole}}, '*');
-        }}
-        </script>
-        """,
-        height=0,
-    )
-
-# --- SESSION STATE INITIALIZATION ---
+# সেশন স্টেট ইনিশিয়ালাইজেশন
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "fullscreen" not in st.session_state:
-    st.session_state.fullscreen = False
-
-# --- LOGOUT FUNCTION ---
-def logout():
-    st.session_state.logged_in = False
     st.session_state.username = None
     st.session_state.role = None
-    st.markdown("<script>localStorage.clear();</script>", unsafe_allow_html=True)
-    st.rerun()
+if "current_tab" not in st.session_state:
+    st.session_state.current_tab = "Home"
 
-# --- SIDEBAR NAVIGATION ---
-st.sidebar.title("🎓 Learning Portal")
-
-if st.session_state.logged_in:
-    st.sidebar.subheader(f"Welcome, {st.session_state.username}!")
-    st.sidebar.info(f"Role: {st.session_state.role.capitalize()}")
-    
-    # Standard navigation mapping
-    pages = ["Dashboard / Videos", "Progress & Leaderboard"]
-    if st.session_state.role == "admin":
-        pages.append("Admin Panel")
-        
-    page_selection = st.sidebar.radio("Go to Page:", pages)
-    
-    if st.sidebar.button("Log Out", use_container_width=True):
-        logout()
-else:
-    page_selection = "Login / Register"
-    st.sidebar.warning("Please Log In to access pages.")
-
-st.sidebar.markdown("---")
-st.sidebar.caption("💡 Hosted Free on Streamlit Community Cloud with a local SQLite engine.")
-
-# --- PAGE 1: LOGIN & REGISTRATION ---
-if page_selection == "Login / Register":
-    st.title("🔐 Portal Authentication")
-    
-    tab1, tab2 = st.tabs(["Login", "Register New Account"])
-    
-    with tab1:
-        st.subheader("Login to Your Dashboard")
-        login_user = st.text_input("Username", key="login_user_input").strip()
-        login_pass = st.text_input("Password", type="password", key="login_pass_input")
-        
-        if st.button("Sign In", type="primary"):
-            hashed_pw = hashlib.sha256(login_pass.encode()).hexdigest()
-            user_record = run_query("SELECT username, role FROM users WHERE username = ? AND password = ?", 
-                                    (login_user, hashed_pw), fetch="one")
-            
-            if user_record:
+# অটো-লগইন প্রসেস (যদি ব্রাউজার লিংকে session_token থাকে)
+if not st.session_state.logged_in:
+    query_params = st.query_params
+    if "session_token" in query_params:
+        token = query_params["session_token"]
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.username, u.role FROM sessions s 
+                JOIN users u ON s.username = u.username 
+                WHERE s.token = ?
+            """, (token,))
+            session_record = cursor.fetchone()
+            if session_record:
                 st.session_state.logged_in = True
-                st.session_state.username = user_record[0]
-                st.session_state.role = user_record[1]
-                
-                # HTML injection workaround to force write token state into localStorage safely
-                st.markdown(f"""
-                    <script>
-                        localStorage.setItem('learning_portal_user', '{user_record[0]}');
-                        localStorage.setItem('learning_portal_role', '{user_record[1]}');
-                    </script>
-                """, unsafe_allow_html=True)
-                
-                st.success(f"Success! Welcome back, {user_record[0]}.")
-                st.rerun()
+                st.session_state.username = session_record["username"]
+                st.session_state.role = session_record["role"]
             else:
-                st.error("Invalid Username or Password. Please try again.")
-                
-    with tab2:
-        st.subheader("Create a New Account")
-        reg_user = st.text_input("Choose Username", key="reg_user_input").strip()
-        reg_pass = st.text_input("Choose Password", type="password", key="reg_pass_input")
-        reg_pass_conf = st.text_input("Confirm Password", type="password", key="reg_pass_conf_input")
-        
-        if st.button("Register Account"):
-            if not reg_user or not reg_pass:
-                st.error("Fields cannot be empty.")
-            elif reg_pass != reg_pass_conf:
-                st.error("Passwords do not match.")
-            else:
-                hashed_reg_pw = hashlib.sha256(reg_pass.encode()).hexdigest()
-                try:
-                    run_query("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
-                              (reg_user, hashed_reg_pw, "student"), fetch="none")
-                    st.success("Account created successfully! You can now log in above.")
-                except sqlite3.IntegrityError:
-                    st.error("Username already taken. Please try another one.")
+                # অবৈধ টোকেন হলে রিমুভ করা
+                st.query_params.pop("session_token", None)
 
-# --- PAGE 2: DASHBOARD / VIDEO PORTAL (STUDENT VIEW) ---
-elif page_selection == "Dashboard / Videos":
-    st.title("📺 Learning Hub Portal")
-    
-    # Toggle Distraction-free / Full-Width mode dynamically via Session State Toggle
-    col_title, col_toggle = st.columns([3, 1])
-    with col_toggle:
-        if st.checkbox("🎯 Toggle Full-Screen Focus Mode", value=st.session_state.fullscreen):
-            st.session_state.fullscreen = True
-            st.markdown("<style>.main .block-container { max-width: 100% !important; padding-left: 1rem; padding-right: 1rem; }</style>", unsafe_allow_html=True)
-        else:
-            st.session_state.fullscreen = False
-
-    videos = run_query("SELECT id, title, url, description, task_desc FROM videos ORDER BY id DESC")
-    
-    if not videos:
-        st.info("No educational videos have been published yet. Check back soon!")
-    else:
-        for vid_id, title, url, desc, task_desc in videos:
-            st.markdown(f"""<div class='video-card'><h3>🎥 {title}</h3><p><i>{desc}</i></p></div>""", unsafe_allow_html=True)
+def login_user(username, password):
+    hashed_pw = hashlib.sha256(password.encode()).hexdigest()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, hashed_pw))
+        user = cursor.fetchone()
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.username = user["username"]
+            st.session_state.role = user["role"]
             
-            # Responsive video component embedding
-            try:
-                st.video(url)
-            except Exception as e:
-                st.warning(f"Could not load streaming player for this URL format. Direct link: [Watch Here]({url})")
-                
-            # Task & Assignment Box Section
-            with st.expander("📝 View Associated Assignment / Task", expanded=True):
-                st.markdown(f"**Task Requirements:**\n{task_desc}")
-                
-                # Check for existing submission
-                existing_sub = run_query("SELECT submission_text, timestamp FROM submissions WHERE username = ? AND video_id = ?", 
-                                         (st.session_state.username, vid_id), fetch="one")
-                
-                if existing_sub:
-                    st.success(f"✓ You submitted a task on {existing_sub[1]}")
-                    st.info(f"**Your Previous Record:** {existing_sub[0]}")
-                
-                # Submission Form
-                with st.form(key=f"sub_form_{vid_id}"):
-                    sub_text = st.text_area("Paste your GitHub repository link, code output, or text notes here:", placeholder="https://github.com/...")
-                    submit_btn = st.form_submit_button("Submit Assignment")
-                    
-                    if submit_btn:
-                        if not sub_text.strip():
-                            st.error("Submission text cannot be blank.")
-                        else:
-                            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            if existing_sub:
-                                # Update entry
-                                run_query("UPDATE submissions SET submission_text = ?, timestamp = ? WHERE username = ? AND video_id = ?",
-                                          (sub_text, now, st.session_state.username, vid_id), fetch="none")
-                            else:
-                                # New entry
-                                run_query("INSERT INTO submissions (username, video_id, status, submission_text, timestamp) VALUES (?, ?, ?, ?, ?)",
-                                          (st.session_state.username, vid_id, "Completed", sub_text, now), fetch="none")
-                            st.success("Assignment updated and saved successfully!")
-                            st.rerun()
-            st.markdown("---")
-
-# --- PAGE 3: PROGRESS TRACKER & LEADERBOARD (PUBLIC VIEW) ---
-elif page_selection == "Progress & Leaderboard":
-    st.title("🏆 Group Progress & Dashboard Monitoring")
-    
-    users = [u[0] for u in run_query("SELECT username FROM users WHERE role = 'student'")]
-    all_videos = run_query("SELECT id, title FROM videos")
-    
-    # 1. Missing Tasks Core Logic Analysis
-    st.subheader("⚠️ Missing Assignments Warning Desk")
-    
-    missing_data = []
-    for user in users:
-        user_subs = [s[0] for s in run_query("SELECT video_id FROM submissions WHERE username = ?", (user,))]
-        missing_tasks = []
-        for vid_id, vid_title in all_videos:
-            if vid_id not in user_subs:
-                missing_tasks.append(vid_title)
-                
-        status_string = ", ".join(missing_tasks) if missing_tasks else "🎉 All Tasks Completed!"
-        missing_data.append({"User / Student": user, "Missing Content Assignments": status_string})
-        
-    st.table(missing_data)
-    
-    # 2. Raw Submissions Review Stream Feed
-    st.markdown("---")
-    st.subheader("👀 Peer Review Feed (All Group Submissions)")
-    
-    raw_feed = run_query("""
-        SELECT s.username, v.title, s.submission_text, s.timestamp 
-        FROM submissions s 
-        JOIN videos v ON s.video_id = v.id 
-        ORDER BY s.timestamp DESC
-    """)
-    
-    if not raw_feed:
-        st.info("No submissions processed across the group yet.")
-    else:
-        for student, v_title, text_content, time_stamp in raw_feed:
-            with st.chat_message("user"):
-                st.markdown(f"**{student}** turned in workspace for *{v_title}*")
-                st.caption(f"Submitted on: {time_stamp}")
-                st.code(text_content, language="markdown")
-
-# --- PAGE 4: ADMIN PANEL ---
-elif page_selection == "Admin Panel" and st.session_state.role == "admin":
-    st.title("🛠️ Administrator Control Panel")
-    
-    tab_vid, tab_users = st.tabs(["📤 Publish Video Content", "👥 Manage Users Workspace"])
-    
-    with tab_vid:
-        st.subheader("Upload & Broadcast New Task Module")
-        with st.form("admin_video_form"):
-            v_title = st.text_input("Video Title / Topic Title")
-            v_url = st.text_input("Video Stream URL (YouTube, Drive, etc.)")
-            v_desc = st.text_area("Brief Overview / Subtext Description")
-            v_task = st.text_area("Detailed Assignment Task Instructions")
+            # পেজ রিলোড এর জন্য টোকেন জেনারেট ও সেভ করা
+            token_string = f"{username}-{datetime.now().isoformat()}"
+            token = hashlib.sha256(token_string.encode()).hexdigest()
+            cursor.execute("INSERT OR REPLACE INTO sessions (username, token, created_at) VALUES (?, ?, ?)",
+                           (username, token, datetime.now().isoformat()))
+            conn.commit()
             
-            submit_video = st.form_submit_button("Publish Course Module")
-            
-            if submit_video:
-                if not v_title or not v_url or not v_task:
-                    st.error("Title, Video Link, and Assignment Data fields are mandatory.")
-                else:
-                    today_str = datetime.date.today().isoformat()
-                    run_query("INSERT INTO videos (title, url, description, task_desc, date_added) VALUES (?, ?, ?, ?, ?)",
-                              (v_title, v_url, v_desc, v_task, today_str), fetch="none")
-                    st.success(f"Successfully published: '{v_title}'!")
+            # ব্রাউজার লিংকে টোকেন সেট করা
+            st.query_params["session_token"] = token
+            return True
+    return False
+
+def register_user(username, password):
+    hashed_pw = hashlib.sha256(password.encode()).hexdigest()
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
+                           (username, hashed_pw, "user"))
+            conn.commit()
+            return True
+    except sqlite3.IntegrityError:
+        return False
+
+# ----------------- অ্যাপ রেন্ডারিং -----------------
+st.markdown("<h1 class='app-title'>🐍 PySquad Hub</h1>", unsafe_allow_html=True)
+st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস ট্র্যাক করি</div>", unsafe_allow_html=True)
+
+if not st.session_state.logged_in:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    auth_mode = st.radio("আপনার অ্যাকশন সিলেক্ট করুন", ["লগইন করুন", "নতুন অ্যাকাউন্ট খুলুন"], horizontal=True)
+    
+    username_input = st.text_input("ইউজারনেম (Username)", placeholder="যেমন: Touhidul")
+    password_input = st.text_input("পাসওয়ার্ড (Password)", type="password", placeholder="পাসওয়ার্ড লিখুন")
+    
+    if auth_mode == "লগইন করুন":
+        if st.button("ড্যাশবোর্ডে প্রবেশ করুন 🚀"):
+            if username_input and password_input:
+                if login_user(username_input, password_input):
+                    st.success(f"স্বাগতম, {st.session_state.username}!")
                     st.rerun()
-                    
-    with tab_users:
-        st.subheader("Registered Peer Network Profiles")
-        user_profiles = run_query("SELECT id, username, role FROM users")
+                else:
+                    st.error("ভুল ইউজারনেম অথবা পাসওয়ার্ড! আবার চেষ্টা করুন।")
+            else:
+                st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
+    else:
+        if st.button("রেজিস্ট্রেশন সম্পন্ন করুন ✨"):
+            if username_input and password_input:
+                if len(password_input) < 4:
+                    st.error("পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে।")
+                elif register_user(username_input, password_input):
+                    st.success("অ্যাকাউন্ট তৈরি সফল হয়েছে! এখন লগইন করুন।")
+                else:
+                    st.error("এই ইউজারনেমটি ইতিমধ্যে ব্যবহৃত হয়েছে। অন্য নাম দিন।")
+            else:
+                st.warning("দয়া করে সবগুলো ঘর পূরণ করুন।")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+else:
+    st.markdown("---")
+    nav_cols = st.columns(4 if st.session_state.role == "admin" else 3)
+    
+    with nav_cols[0]:
+        if st.button("🎬 ভিডিওসমূহ"): st.session_state.current_tab = "Home"
+    with nav_cols[1]:
+        if st.button("📊 ট্র্যাকার"): st.session_state.current_tab = "Tracker"
+    with nav_cols[2]:
+        if st.button("🔓 লগআউট"):
+            # লগআউট করার সময় ব্রাউজার ও ডাটাবেজ থেকে সেশন টোকেন ডিলিট করা
+            token = st.query_params.get("session_token")
+            if token:
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM sessions WHERE token = ?", (token,))
+                    conn.commit()
+            st.query_params.pop("session_token", None)
+            st.session_state.logged_in = False
+            st.session_state.username = None
+            st.session_state.role = None
+            st.rerun()
+    if st.session_state.role == "admin":
+        with nav_cols[3]:
+            if st.button("⚙️ অ্যাডমিন"): st.session_state.current_tab = "Admin"
+
+    # ----------------- পেজ ১: ভিডিও পোর্টাল (HOME) -----------------
+    if st.session_state.current_tab == "Home":
+        st.subheader("আপনার আজকের ক্লাসের ভিডিও")
         
-        # Format into clean readable structured layout
-        import pandas as pd
-        df_users = pd.DataFrame(user_profiles, columns=["Database ID", "Username Account", "System Role Permission"])
-        st.dataframe(df_users, use_container_width=True)
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM videos ORDER BY id ASC")
+            all_videos = cursor.fetchall()
+            
+        if not all_videos:
+            st.info("এখনো কোনো ভিডিও আপলোড করা হয়নি। গ্রুপ লিডারকে ভিডিও দেওয়ার জন্য বলুন!")
+        else:
+            for idx, vid in enumerate(all_videos):
+                vid_id = vid["id"]
+                st.markdown(f"<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<h3>ভিডিও #{idx+1}: {vid['title']}</h3>", unsafe_allow_html=True)
+                
+                # ভিডিও দেখা হয়েছে কিনা চেক করা
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT * FROM views WHERE username = ? AND video_id = ?", 
+                                   (st.session_state.username, vid_id))
+                    watched = cursor.fetchone() is not None
+                
+                if watched:
+                    st.markdown("<span class='badge' style='background-color:#1f6feb;'>দেখেছি ✅</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<span class='badge' style='background-color:#da3633;'>দেখা হয়নি ❌</span>", unsafe_allow_html=True)
+                
+                st.write("")
+                
+                # নতুন ও উন্নত মোবাইল ফ্রেন্ডলি প্লেয়ার (নরমাল ও ফুল স্ক্রিন সাপোর্ট)
+                playable_link = get_playable_url(vid["url"])
+                try:
+                    st.video(playable_link)
+                except Exception:
+                    st.error("ভিডিওটি লোড করা যাচ্ছে না। অনুগ্রহ করে সঠিক লিংক ব্যবহার করুন।")
+                
+                # প্র্যাকটিস টাস্কের বিবরণ
+                with st.expander("📝 প্র্যাকটিস টাস্কের বিস্তারিত দেখুন", expanded=True):
+                    st.markdown(f"**আজকের কাজ:** \n{vid['task_desc']}")
+                
+                # অ্যাকশন বাটনসমূহ
+                col1, col2 = st.columns(2)
+                with col1:
+                    if not watched:
+                        if st.button("দেখা শেষ করলাম 👀", key=f"watch_btn_{vid_id}"):
+                            with get_db_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
+                                               (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                conn.commit()
+                            st.success("ভিডিও দেখা সফলভাবে সেভ হয়েছে!")
+                            st.rerun()
+                with col2:
+                    # স্ক্রিনশট আপলোড সেকশন
+                    with st.expander("📤 স্ক্রিনশট জমা দিন"):
+                        up_file = st.file_uploader("আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন", type=["png", "jpg", "jpeg"], key=f"up_{vid_id}")
+                        if st.button("টাস্ক সাবমিট করুন 🚀", key=f"sub_btn_{vid_id}"):
+                            if up_file:
+                                b64_img = file_to_base64(up_file)
+                                with get_db_connection() as conn:
+                                    cursor = conn.cursor()
+                                    cursor.execute("INSERT INTO submissions (username, video_id, screenshot, submitted_at) VALUES (?, ?, ?, ?)",
+                                                   (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                    # সাবমিট করলে অটোমেটিক্যালি ভিডিও দেখা কমপ্লিট হয়ে যাবে
+                                    cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
+                                                   (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                    conn.commit()
+                                st.success("আপনার টাস্কের স্ক্রিনশট সফলভাবে জমা হয়েছে!")
+                                st.rerun()
+                            else:
+                                st.error("দয়া করে একটি ইমেজ বা স্ক্রিনশট সিলেক্ট করুন।")
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+
+    # ----------------- পেজ ২: প্রোগ্রেস ট্র্যাকার (TRACKER) -----------------
+    elif st.session_state.current_tab == "Tracker":
+        st.subheader("গ্রুপের বন্ধুদের কাজের ট্র্যাকিং")
+        
+        with get_db_connection() as conn:
+            # অ্যাডমিন বাদে অন্য সব ইউজার
+            df_users = pd.read_sql_query("SELECT username FROM users WHERE role != 'admin'", conn)
+            # সর্বমোট ভিডিওর সংখ্যা
+            df_vids = pd.read_sql_query("SELECT id, title FROM videos", conn)
+            # সাবমিশন ডাটা
+            df_subs = pd.read_sql_query("SELECT username, video_id FROM submissions", conn)
+            
+        if df_users.empty:
+            st.info("এখনো কোনো মেম্বার রেজিস্ট্রেশন করেনি।")
+        elif df_vids.empty:
+            st.info("ট্র্যাক করার জন্য এখনো কোনো ভিডিও আপলোড করা হয়নি।")
+        else:
+            st.write("### 📉 কার কার কোন টাস্ক বাদ আছে?")
+            for _, u in df_users.iterrows():
+                user = u["username"]
+                completed_ids = set(df_subs[df_subs["username"] == user]["video_id"].tolist())
+                all_ids = set(df_vids["id"].tolist())
+                missing_ids = all_ids - completed_ids
+                
+                st.markdown(f"<div class='card' style='padding: 15px;'>", unsafe_allow_html=True)
+                st.markdown(f"**👤 মেম্বার:** `{user}`")
+                if not missing_ids:
+                    st.markdown("<span class='badge' style='background-color:#238636;'>সবগুলো টাস্ক সম্পন্ন করেছে! 🔥</span>", unsafe_allow_html=True)
+                else:
+                    missing_labels = []
+                    for m_id in missing_ids:
+                        matching_rows = df_vids[df_vids["id"] == m_id]
+                        if not matching_rows.empty:
+                            idx = matching_rows.index[0] + 1
+                            missing_labels.append(f"ভিডিও {idx}")
+                    st.markdown(f"🔴 **বাকি আছে:** {', '.join(missing_labels)}")
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            # বন্ধুদের জমা দেওয়া কাজের লাইভ ফিড
+            st.write("### 📸 সবার জমা দেওয়া প্র্যাকটিস স্ক্রিনশটসমূহ")
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT s.username, s.submitted_at, s.screenshot, v.title, v.id as vid_id 
+                    FROM submissions s 
+                    JOIN videos v ON s.video_id = v.id 
+                    ORDER BY s.id DESC
+                """)
+                all_subs = cursor.fetchall()
+                
+            if not all_subs:
+                st.info("এখনো কেউ স্ক্রিনশট জমা দেয়নি।")
+            else:
+                for sub in all_subs:
+                    st.markdown("<div class='card'>", unsafe_allow_html=True)
+                    st.markdown(f"👤 **{sub['username']}** স্ক্রিনশট জমা দিয়েছে - **ভিডিও: `{sub['title']}`**-এর জন্য")
+                    st.caption(f"জমা দেওয়ার সময়: {sub['submitted_at']}")
+                    
+                    # Base64 থেকে ছবি ডিকোড করে দেখানো
+                    img_data = sub["screenshot"]
+                    try:
+                        st.image(base64.b64decode(img_data), use_column_width=True)
+                    except Exception:
+                        st.error("ছবিটি লোড করতে সমস্যা হচ্ছে।")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ----------------- পেজ ৩: অ্যাডমিন প্যানেল (ADMIN) -----------------
+    elif st.session_state.current_tab == "Admin" and st.session_state.role == "admin":
+        st.subheader("গ্রুপ লিডার কন্ট্রোল প্যানেল (অ্যাডমিন)")
+        
+        admin_tab1, admin_tab2, admin_tab3 = st.tabs(["📤 নতুন ভিডিও দিন", "👁️ ভিউ ট্র্যাকিং", "🗑️ ভিডিও মুছুন"])
+        
+        # ট্যাব ১: নতুন ভিডিও আপলোড
+        with admin_tab1:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.write("### 🎬 নতুন ভিডিও ও টাস্ক আপলোড করুন")
+            v_title = st.text_input("ভিডিওর শিরোনাম (যেমন: Python List Tutorial)", placeholder="শিরোনাম লিখুন...")
+            v_url = st.text_input("ইউটিউব/ড্রাইভ ভিডিও লিংক", placeholder="যেমন: https://www.youtube.com/watch?v=...")
+            v_task = st.text_area("আজকের প্র্যাকটিস কাজের বিবরণ", placeholder="বন্ধুদের কী কী কোড প্র্যাকটিস করতে হবে তা এখানে লিখুন...")
+            
+            if st.button("ভিডিও এবং টাস্ক পাবলিশ করুন 📣"):
+                if v_title and v_url:
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO videos (title, url, task_desc, date_added) VALUES (?, ?, ?, ?)",
+                                       (v_title, v_url, v_task, datetime.now().strftime("%Y-%m-%d")))
+                        conn.commit()
+                    st.success(f"সফলভাবে পাবলিশ করা হয়েছে: {v_title}")
+                    st.rerun()
+                else:
+                    st.error("ভিডিওর শিরোনাম এবং লিংক অবশ্যই দিতে হবে!")
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # ট্যাব ২: কে কে ভিডিও দেখেছে তার ট্র্যাকিং
+        with admin_tab2:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.write("### 👁️ কোন ভিডিও কে কে দেখেছে দেখুন")
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, title FROM videos")
+                vids_list = cursor.fetchall()
+                
+            if vids_list:
+                selected_vid = st.selectbox("ভিডিও সিলেক্ট করুন", 
+                                            options=[v["id"] for v in vids_list], 
+                                            format_func=lambda x: f"ভিডিও {x} - " + [v["title"] for v in vids_list if v["id"] == x][0])
+                
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT username, viewed_at FROM views 
+                        WHERE video_id = ?
+                    """, (selected_vid,))
+                    viewers = cursor.fetchall()
+                    
+                if viewers:
+                    st.success(f"মোট ভিউয়ার্স সংখ্যা: {len(viewers)} জন")
+                    for vw in viewers:
+                        st.write(f"- 👤 **{vw['username']}** (দেখেছে: {vw['viewed_at']})")
+                else:
+                    st.warning("এখনো কেউ এই ভিডিওটি দেখেছে হিসেবে মার্ক করেনি।")
+            else:
+                st.info("ভিউয়ার্স ট্র্যাক করার জন্য আগে ভিডিও আপলোড করুন।")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        # ট্যাব ৩: ভিডিও ডিলিট করা
+        with admin_tab3:
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.write("### 🗑️ ভিডিও ডিলিট ম্যানেজমেন্ট")
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, title, date_added FROM videos ORDER BY id ASC")
+                all_vids_to_del = cursor.fetchall()
+                
+            if not all_vids_to_del:
+                st.info("মুছে ফেলার মতো কোনো ভিডিও পাওয়া যায়নি।")
+            else:
+                for v_del in all_vids_to_del:
+                    col_vid_info, col_vid_act = st.columns([3, 1])
+                    with col_vid_info:
+                        st.write(f"🎬 **{v_del['title']}** (তারিখ: {v_del['date_added']})")
+                    with col_vid_act:
+                        if st.button("🗑️ মুছুন", key=f"del_v_{v_del['id']}"):
+                            with get_db_connection() as conn:
+                                cursor = conn.cursor()
+                                # ভিডিও টেবিল থেকে ডিলিট
+                                cursor.execute("DELETE FROM videos WHERE id = ?", (v_del["id"],))
+                                # এই ভিডিওর সাথে সংযুক্ত ভিউ ডিলিট
+                                cursor.execute("DELETE FROM views WHERE video_id = ?", (v_del["id"],))
+                                # এই ভিডিওর সাথে সংযুক্ত সাবমিশন ডিলিট
+                                cursor.execute("DELETE FROM submissions WHERE video_id = ?", (v_del["id"],))
+                                conn.commit()
+                            st.success("ভিডিওটি সফলভাবে মুছে ফেলা হয়েছে!")
+                            st.rerun()
+                    st.markdown("---")
+            st.markdown("</div>", unsafe_allow_html=True)
+```
+eof
+
+### 💡 এখন আপনার যা করতে হবে:
+১. গিটহাবে আপনার আগের তৈরি করা ফাইলটির সম্পূর্ণ কোড মুছে এই নতুন কোডটি বসিয়ে সেভ করুন।
+২. পেজ রিফ্রেশ করে একবার লগইন করে নিন। এরপর যতবারই পেজ রিলোড বা বন্ধ করে আবার খুলবেন, ব্রাউজার ইউজারকে আগের অবস্থায় মনে রাখবে এবং বার বার লগআউট হবে না!
+৩. অ্যাডমিন হিসেবে লগইন করে অ্যাডমিন প্যানেলের একদম ডানপাশের ট্যাব থেকে যেকোনো ভিডিও ডিলিট করতে পারবেন।
