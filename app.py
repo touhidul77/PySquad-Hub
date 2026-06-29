@@ -5,7 +5,6 @@ import base64
 from datetime import datetime
 import pandas as pd
 
-# মোবাইলের জন্য রেসপনসিভ পেজ কনফিগারেশন
 st.set_page_config(
     page_title="PySquad Hub",
     page_icon="https://img.icons8.com/color/144/python.png",  # আসল পাইথন লোগো ট্যাব আইকন হিসেবে
@@ -59,34 +58,38 @@ st.markdown("""
         margin-bottom: 20px !important;
     }
     
-    /* টাইটেল এবং লোগো কন্টেইনার */
+    /* টাইটেল এবং লোগো কন্টেইনার (মোবাইলে একদম এক লাইনে রাখার জন্য) */
     .logo-container {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 15px;
-        margin-bottom: 5px;
+        gap: 12px;
+        margin-bottom: 8px;
         margin-top: 20px;
+        flex-wrap: nowrap; /* এক লাইনেই রাখবে, নিচে ভাঙবে না */
     }
     .logo-img {
-        width: 54px;
-        height: 54px;
+        width: clamp(32px, 8vw, 54px); /* স্ক্রিন সাইজ অনুযায়ী লোগো ছোট-বড় হবে */
+        height: clamp(32px, 8vw, 54px);
         filter: drop-shadow(0 0 8px rgba(88, 166, 255, 0.6));
+        flex-shrink: 0;
     }
     .app-title {
-        font-size: 2.3rem;
+        font-size: clamp(1.4rem, 6vw, 2.3rem); /* মোবাইলে ফন্ট সাইজ স্বয়ংক্রিয়ভাবে ছোট হয়ে এক লাইনে ফিট হবে */
         font-weight: 800;
         color: #58a6ff;
         margin: 0;
         font-family: 'Inter', sans-serif;
         text-shadow: 0 0 10px rgba(88, 166, 255, 0.2);
         line-height: 1.1;
+        white-space: nowrap; /* কোনো অবস্থাতেই ভেঙে দ্বিতীয় লাইনে যাবে না */
     }
     .app-subtitle {
-        font-size: 1rem;
+        font-size: clamp(0.7rem, 3.2vw, 1rem); /* সাবটাইটেলও মোবাইলে সংকুচিত হয়ে এক লাইনে থাকবে */
         color: #8b949e;
         text-align: center;
         margin-bottom: 25px;
+        white-space: nowrap; /* কোনো অবস্থাতেই ভেঙে দ্বিতীয় লাইনে যাবে না */
     }
     .badge {
         padding: 4px 10px;
@@ -94,27 +97,6 @@ st.markdown("""
         font-size: 0.8rem;
         font-weight: bold;
         display: inline-block;
-    }
-    
-    /* রেসপনসিভ ব্রেকিং রুলস (মোবাইলের জন্য ইমেজ bf4bd9 অনুযায়ী দুই লাইনে আনার জন্য) */
-    .title-word {
-        display: inline;
-    }
-    .sub-break {
-        display: inline;
-    }
-    
-    @media (max-width: 480px) {
-        .title-word {
-            display: block; /* মোবাইলে 'Hub' শব্দটিকে নিচের লাইনে পাঠিয়ে দিবে */
-        }
-        .app-title {
-            font-size: 1.95rem; /* মোবাইল স্ক্রিনের জন্য ফন্ট সাইজ সামঞ্জস্যপূর্ণ করা হলো */
-        }
-        .sub-break {
-            display: block; /* মোবাইলে 'ট্র্যাক করি' অংশটি নিচের লাইনে পাঠিয়ে দিবে */
-            margin-top: 4px;
-        }
     }
     
     /* বাটনের মডার্ন স্টাইল */
@@ -300,14 +282,14 @@ def register_user(username, password):
     except sqlite3.IntegrityError:
         return False
 
-# লোগো এবং টাইটেল যা মোবাইলে ২ লাইনে এবং ল্যাপটপে ১ লাইনে দেখাবে
+# লোগো এবং টাইটেল যা ল্যাপটপ এবং মোবাইল সব জায়গায় সিঙ্গেল লাইনে থাকবে
 st.markdown("""
 <div class="logo-container">
     <img src="https://img.icons8.com/color/144/python.png" class="logo-img" alt="Python Logo">
-    <h1 class="app-title">PySquad <span class="title-word">Hub</span></h1>
+    <h1 class="app-title">PySquad Hub</h1>
 </div>
 """, unsafe_allow_html=True)
-st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস <span class='sub-break'>ট্র্যাক করি</span></div>", unsafe_allow_html=True)
+st.markdown("<div class='app-subtitle'>সবাই মিলে একসাথে পাইথন শিখি ও প্রোগ্রেস ট্র্যাক করি</div>", unsafe_allow_html=True)
 
 if not st.session_state.logged_in:
     with st.container(border=True):  # নেটিভ কন্টেইনার ব্যবহার করায় কোনো খালি বক্স থাকবে না
