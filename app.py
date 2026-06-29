@@ -533,7 +533,3 @@ else:
                             st.rerun()
                     st.markdown("---")
             st.markdown("</div>", unsafe_allow_html=True)
-```
-eof
-
-### 💡 এখন আপনার যা করতে হবে:
