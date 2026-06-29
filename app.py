@@ -261,7 +261,10 @@ if "current_tab" not in st.session_state:
     st.session_state.current_tab = "Home"
 if "success_notification" not in st.session_state:
     st.session_state.success_notification = None
+if "user_upload_success" not in st.session_state:
+    st.session_state.user_upload_success = None
 
+# Auto login via token
 if not st.session_state.logged_in:
     query_params = st.query_params
     if "session_token" in query_params:
@@ -314,7 +317,6 @@ def register_user(username, password):
     except sqlite3.IntegrityError:
         return False
 
-# লোগো এবং টাইটেল
 st.markdown("""
 <div class="logo-container">
     <img src="https://img.icons8.com/color/144/python.png" class="logo-img" alt="Python Logo">
@@ -377,11 +379,9 @@ else:
         with nav_cols[3]:
             if st.button("⚙️ অ্যাডমিন"): st.session_state.current_tab = "Admin"
 
-    # ইন-অ্যাপ নোটিফিকেশন রেন্ডারিং (ড্যাশবোর্ডের একদম ওপরে)
     username = st.session_state.username
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # ইউজারের জন্য নোটিফিকেশন কোয়েরি (ব্যক্তিগত রিমাইন্ডার এবং ব্রডকাস্ট)
         if username == 'admin':
             cursor.execute("""
                 SELECT n.* FROM notifications n
@@ -418,6 +418,11 @@ else:
     # ----------------- পেজ ১: ভিডিও পোর্টাল (HOME) -----------------
     if st.session_state.current_tab == "Home":
         st.subheader("আপনার আজকের ক্লাসের ভিডিও")
+        
+        # সফল স্ক্রিনশট আপলোড সাকসেস মেসেজ শো করা
+        if st.session_state.user_upload_success:
+            st.success(st.session_state.user_upload_success)
+            st.session_state.user_upload_success = None
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -463,26 +468,39 @@ else:
                                 st.success("ভিডিও দেখা সফলভাবে সেভ হয়েছে!")
                                 st.rerun()
                     with col2:
-                        with st.expander("📤 স্ক্রিনশট জমা দিন"):
-                            up_file = st.file_uploader("আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন", type=["png", "jpg", "jpeg"], key=f"up_{vid_id}")
+                        with st.expander("📤 স্ক্রিনশট জমা দিন (একসাথে ৫টি পর্যন্ত)"):
+                            up_files = st.file_uploader(
+                                "আপনার প্র্যাকটিসের স্ক্রিনশট সিলেক্ট করুন (একের অধিক সিলেক্ট করতে পারেন)", 
+                                type=["png", "jpg", "jpeg"], 
+                                accept_multiple_files=True,
+                                key=f"up_{vid_id}"
+                            )
                             if st.button("টাস্ক সাবমিট করুন 🚀", key=f"sub_btn_{vid_id}"):
-                                if up_file:
-                                    b64_img = file_to_base64(up_file)
-                                    with get_db_connection() as conn:
-                                        cursor = conn.cursor()
-                                        cursor.execute("INSERT INTO submissions (username, video_id, screenshot, submitted_at) VALUES (?, ?, ?, ?)",
-                                                       (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
-                                        cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
-                                                       (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
-                                        conn.commit()
-                                    
-                                    # অ্যাডমিন প্যানেলে রিয়েল-টাইম নোটিফিকেশন পাঠানো
-                                    add_notification('admin', f"📥 **{st.session_state.username}** ভিডিও '`{vid['title']}`' এর প্র্যাকটিস স্ক্রিনশট সাবমিট করেছে!")
-                                    
-                                    st.success("আপনার টাস্কের স্ক্রিনশট সফলভাবে জমা হয়েছে!")
-                                    st.rerun()
+                                if up_files:
+                                    if len(up_files) > 5:
+                                        st.error("⚠️ দুঃখিত, আপনি একসাথে সর্বোচ্চ ৫টি স্ক্রিনশট আপলোড করতে পারবেন।")
+                                    else:
+                                        with get_db_connection() as conn:
+                                            cursor = conn.cursor()
+                                            for single_file in up_files:
+                                                b64_img = file_to_base64(single_file)
+                                                cursor.execute("""
+                                                    INSERT INTO submissions (username, video_id, screenshot, submitted_at) 
+                                                    VALUES (?, ?, ?, ?)
+                                                """, (st.session_state.username, vid_id, b64_img, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                            
+                                            cursor.execute("INSERT OR IGNORE INTO views (username, video_id, viewed_at) VALUES (?, ?, ?)",
+                                                           (st.session_state.username, vid_id, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                                            conn.commit()
+                                        
+                                        # অ্যাডমিন প্যানেলে রিয়েল-টাইম নোটিফিকেশন পাঠানো
+                                        add_notification('admin', f"📥 **{st.session_state.username}** ভিডিও '`{vid['title']}`' এর {len(up_files)}টি প্র্যাকটিস স্ক্রিনশট সাবমিট করেছে!")
+                                        
+                                        # ইউজারের জন্য সফল আপলোডের নোটিফিকেশন সেট
+                                        st.session_state.user_upload_success = f"🎉 সফলভাবে আপনার {len(up_files)}টি প্র্যাকটিস স্ক্রিনশট আপলোড হয়েছে!"
+                                        st.rerun()
                                 else:
-                                    st.error("দয়া করে একটি ইমেজ বা স্ক্রিনশট সিলেক্ট করুন।")
+                                    st.error("দয়া করে কমপক্ষে একটি প্র্যাকটিস স্ক্রিনশট সিলেক্ট করুন।")
 
     # ----------------- পেজ ২: প্রোগ্রেস ট্র্যাকার (TRACKER) -----------------
     elif st.session_state.current_tab == "Tracker":
@@ -519,18 +537,35 @@ else:
                         st.markdown(f"🔴 **বাকি আছে:** {', '.join(missing_labels)}")
             
             st.write("### 📸 সবার জমা দেওয়া প্র্যাকটিস স্ক্রিনশটসমূহ")
+            
+            # মেম্বারদের তালিকা সংগ্রহ ফিল্টারের জন্য
+            member_names = list(df_users["username"].unique())
+            member_filter = st.selectbox(
+                "🔍 মেম্বার অনুযায়ী স্ক্রিনশট ফিল্টার করুন:", 
+                ["সবাই (All Members)"] + member_names
+            )
+            
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT s.username, s.submitted_at, s.screenshot, v.title, v.id as vid_id 
-                    FROM submissions s 
-                    JOIN videos v ON s.video_id = v.id 
-                    ORDER BY s.id DESC
-                """)
+                if member_filter == "সবাই (All Members)":
+                    cursor.execute("""
+                        SELECT s.id as sub_id, s.username, s.submitted_at, s.screenshot, v.title, v.id as vid_id 
+                        FROM submissions s 
+                        JOIN videos v ON s.video_id = v.id 
+                        ORDER BY s.id DESC
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT s.id as sub_id, s.username, s.submitted_at, s.screenshot, v.title, v.id as vid_id 
+                        FROM submissions s 
+                        JOIN videos v ON s.video_id = v.id 
+                        WHERE s.username = ?
+                        ORDER BY s.id DESC
+                    """, (member_filter,))
                 all_subs = cursor.fetchall()
                 
             if not all_subs:
-                st.info("এখনো কেউ স্ক্রিনশট জমা দেয়নি।")
+                st.info("নির্বাচিত মেম্বারের কোনো স্ক্রিনশট পাওয়া যায়নি।")
             else:
                 for sub in all_subs:
                     with st.container(border=True):
@@ -542,6 +577,15 @@ else:
                             st.image(base64.b64decode(img_data), use_column_width=True)
                         except Exception:
                             st.error("ছবিটি লোড করতে সমস্যা হচ্ছে।")
+                            
+                        if st.session_state.role == "admin":
+                            if st.button("🗑️ ছবি ডিলিট করুন (সাইলেন্টলি)", key=f"del_screenshot_{sub['sub_id']}"):
+                                with get_db_connection() as conn:
+                                    cursor = conn.cursor()
+                                    cursor.execute("DELETE FROM submissions WHERE id = ?", (sub["sub_id"],))
+                                    conn.commit()
+                                st.success("ছবিটি সফলভাবে মুছে ফেলা হয়েছে!")
+                                st.rerun()
 
     # ----------------- পেজ ৩: অ্যাডমিন প্যানেল (ADMIN) -----------------
     elif st.session_state.current_tab == "Admin" and st.session_state.role == "admin":
@@ -613,7 +657,6 @@ else:
                 else:
                     st.info("ভিউয়ার্স ট্র্যাক করার জন্য আগে ভিডিও আপলোড করুন।")
             
-        # অ্যাকশন ৩: ভিডিও ডিলিট করা
         elif admin_action == "🗑️ ভিডিও মুছুন":
             with st.container(border=True):
                 st.write("### 🗑️ ভিডিও ডিলিট ম্যানেজমেন্ট")
@@ -641,7 +684,6 @@ else:
                                 st.rerun()
                         st.markdown("---")
 
-        # অ্যাকশন ৪: মেম্বার ম্যানেজমেন্ট (রিমুভ ও রিমাইন্ডার পাঠানোর মডিউল)
         elif admin_action == "👥 মেম্বার ম্যানেজমেন্ট":
             st.write("### 👥 গ্রুপ মেম্বার ম্যানেজমেন্ট ও কন্ট্রোল")
             with get_db_connection() as conn:
@@ -675,7 +717,6 @@ else:
                             if st.button(f"🗑️ {m_username} কে রিমুভ করুন", key=f"del_member_btn_{m_username}"):
                                 with get_db_connection() as conn:
                                     cursor = conn.cursor()
-                                    # মেম্বার সম্পর্কিত সকল ডেটা ডিলিট
                                     cursor.execute("DELETE FROM users WHERE username = ?", (m_username,))
                                     cursor.execute("DELETE FROM views WHERE username = ?", (m_username,))
                                     cursor.execute("DELETE FROM submissions WHERE username = ?", (m_username,))
